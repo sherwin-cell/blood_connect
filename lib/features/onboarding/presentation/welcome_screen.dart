@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../auth/presentation/login_screen.dart';
+import '../../auth/presentation/login_signup_screen.dart';
 
 /// Shown right after the splash screen. Simple, calm landing point:
 /// logo, name, short tagline, and a single clear call to action.
-///
-/// "Get Started" currently routes to a placeholder — swap the
-/// Navigator.push target for the real login/register screen once
-/// lib/features/auth/presentation/login_screen.dart exists.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 

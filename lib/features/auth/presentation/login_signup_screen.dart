@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
-import 'register_screen.dart';
+import '../data/auth_service.dart';
+import '../../profile/presentation/profile_gate.dart';
 
-/// Email/password + Google login screen.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -13,34 +13,40 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+
   bool _isSubmitting = false;
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _onLoginPressed() async {
+  Future<void> _onSendLinkPressed() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+      final email = _emailController.text.trim();
+      await _authService.sendPasswordlessLink(email);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('emailForSignIn', email);
+
+      if (!mounted) return;
+      _showSnackBar(
+        'Magic link sent to $email! Check your inbox to finish signing in.',
+        isError: false,
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Login failed')));
+      _showSnackBar(AuthService.getErrorMessage(e));
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Something went wrong: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -50,31 +56,32 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        return;
+      final credential = await _authService.signInWithGoogle();
+
+      if (credential != null && mounted) {
+        // Explicitly route to ProfileGate after Google authentication succeeds
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const ProfileGate()),
+        );
       }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      await FirebaseAuth.instance.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Google sign-in failed')),
-      );
+      _showSnackBar(AuthService.getErrorMessage(e));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Something went wrong: $e')));
+      _showSnackBar('Something went wrong: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _showSnackBar(String message, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? null : Colors.green.shade700,
+      ),
+    );
   }
 
   @override
@@ -83,15 +90,15 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 150),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 24),
                 const Text(
-                  'Welcome back',
+                  'Login or Sign Up',
                   style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w700,
@@ -100,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Log in to continue to Blood-Connect',
+                  'Enter your email and we\'ll send you a passwordless sign-in link.',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.black.withOpacity(0.55),
@@ -108,69 +115,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                _FieldLabel('Email'),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: _inputDecoration('you@example.com'),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Email is required';
-                    }
-                    if (!value.contains('@')) return 'Enter a valid email';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 18),
-
-                _FieldLabel('Password'),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: _inputDecoration('••••••••').copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        size: 20,
-                        color: Colors.black45,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: _inputDecoration('you@example.com'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Email is required';
+                        }
+                        if (!value.contains('@')) return 'Enter a valid email';
+                        return null;
+                      },
                     ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Password is required';
-                    }
-                    if (value.length < 6) return 'At least 6 characters';
-                    return null;
-                  },
+                  ],
                 ),
-
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      // TODO: forgot-password flow
-                    },
-                    child: const Text(
-                      'Forgot password?',
-                      style: TextStyle(
-                        color: AppColors.primaryRed,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
 
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _onLoginPressed,
+                    onPressed: _isSubmitting ? null : _onSendLinkPressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryRed,
                       foregroundColor: Colors.white,
@@ -191,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           )
                         : const Text(
-                            'Log in',
+                            'Send Magic Link',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -223,7 +191,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Updated Google Sign-In Button
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -247,36 +214,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      );
-                    },
-                    child: RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.black.withOpacity(0.6),
-                        ),
-                        children: const [
-                          TextSpan(text: "Don't have an account? "),
-                          TextSpan(
-                            text: 'Register',
-                            style: TextStyle(
-                              color: AppColors.primaryRed,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -304,37 +241,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _FieldLabel extends StatelessWidget {
-  final String text;
-  const _FieldLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.black54,
-        ),
-      ),
-    );
-  }
-}
-
-/// A class that holds the full-color, standard Google logo "G" to stay
-/// compliant with branding guidelines.
 class _GoogleLogo extends StatelessWidget {
   const _GoogleLogo();
 
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      'assets/images/google_logo.png', // Ensure this asset is in your project
-      width: 24, // Size recommended for use with medium/large buttons
-      height: 24,
-    );
+    return Image.asset('assets/images/google_logo.png', width: 24, height: 24);
   }
 }
