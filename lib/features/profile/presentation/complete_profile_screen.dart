@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/app_theme.dart'; // Adjust import path
+import '../../../core/theme/app_theme.dart';
 import '../data/profile_service.dart';
-import '../../dashboard/presentation/home_dashboard.dart';
+// Update this path if your verification screen has a different location/filename
+import '../../verification/presentation/screens/identity_verification_info_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -123,9 +124,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         ),
       );
 
-      // Navigate to Home Dashboard cleanly
+      // Navigate directly to the Identity Verification info screen
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeDashboard()),
+        MaterialPageRoute(
+          builder: (_) => const IdentityVerificationInfoScreen(),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
