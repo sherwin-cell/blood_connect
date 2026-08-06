@@ -4,8 +4,6 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/profile_service.dart';
-// Update this path if your verification screen has a different location/filename
-import '../../verification/presentation/screens/identity_verification_info_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -40,6 +38,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     'O+',
     'O-',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill user information if available from FirebaseAuth
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      if (user.displayName != null && user.displayName!.isNotEmpty) {
+        _fullNameController.text = user.displayName!;
+      }
+      if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
+        _phoneController.text = user.phoneNumber!;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -83,11 +96,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   Future<void> _onSaveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedBloodType == null) {
-      _showSnackBar('Please select your blood type');
-      return;
-    }
-
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _showSnackBar('Authentication session lost. Please log in again.');
@@ -97,6 +105,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // 1. Update user details in Firestore
       await _profileService.updateProfile(
         uid: user.uid,
         fullName: _fullNameController.text.trim(),
@@ -115,21 +124,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             : _barangayController.text.trim(),
       );
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile saved successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // Navigate directly to the Identity Verification info screen
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => const IdentityVerificationInfoScreen(),
-        ),
-      );
+      // 2. No Navigator.push needed here!
+      // ProfileGate listens to the user profile stream in real-time and will
+      // automatically swap this screen to IdentityVerificationInfoScreen.
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to save profile: $e');
@@ -197,40 +194,45 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
                 // Photo Placeholder
                 Center(
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 46,
-                        backgroundColor: Colors.black.withOpacity(0.06),
-                        child: const Icon(
-                          Icons.person_rounded,
-                          size: 52,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryRed,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
+                  child: GestureDetector(
+                    onTap: () {
+                      // Optional: Photo picking logic
+                    },
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 46,
+                          backgroundColor: Colors.black.withOpacity(0.06),
                           child: const Icon(
-                            Icons.camera_alt,
-                            size: 16,
-                            color: Colors.white,
+                            Icons.person_rounded,
+                            size: 52,
+                            color: Colors.grey,
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryRed,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
 
-                // Personal Information Section
+                // Personal Information
                 const _SectionTitle('Personal Information'),
                 const SizedBox(height: 12),
 
@@ -304,7 +306,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ),
                 const SizedBox(height: 28),
 
-                // Blood Information Section
+                // Blood Information
                 const _SectionTitle('Blood Information'),
                 const SizedBox(height: 12),
 
@@ -345,7 +347,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ),
                 const SizedBox(height: 36),
 
-                // Submit Button
+                // Save Action Button
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -371,7 +373,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                             ),
                           )
                         : const Text(
-                            'Save Profile',
+                            'Save & Proceed to Verification',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,

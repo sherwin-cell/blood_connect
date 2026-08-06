@@ -1,5 +1,8 @@
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+
+import '../../data/services/ocr_service.dart';
 import '../../domain/entities/verification_data.dart';
 import '../../domain/repositories/i_verification_repository.dart';
 
@@ -21,10 +24,6 @@ class VerificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==========================================
-  // UPDATED: Added method for manual corrections
-  // ==========================================
-
   /// Updates the internal state with manual corrections made by the user
   /// on the Review ID Screen.
   void updateExtractedData({
@@ -35,13 +34,8 @@ class VerificationProvider extends ChangeNotifier {
       extractedName: correctedName,
       idNumber: correctedIdNumber,
     );
-    // In strict Clean Architecture/MVVM, we notify because the Review
-    // Screen is usually navigating away, and this data is needed
-    // for the final Firestore submission.
     notifyListeners();
   }
-
-  // ==========================================
 
   Future<bool> processIdCard(File imageFile) async {
     _setLoading(true);
@@ -55,9 +49,31 @@ class VerificationProvider extends ChangeNotifier {
       );
       _errorMessage = null;
       return true; // ✅ Success!
+    } on NoIdDetectedException catch (e) {
+      // The photo didn't contain enough readable text to be a real ID —
+      // surface the specific reason instead of a generic failure message.
+      _errorMessage = e.message;
+      return false;
     } catch (e) {
       _errorMessage = 'Failed to read text from ID. Please retry.';
       return false; // ❌ OCR / Image processing failed
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // ==========================================
+  // Process Back ID Card
+  // ==========================================
+  Future<bool> processBackIdCard(File imageFile) async {
+    _setLoading(true);
+    try {
+      _data = _data.copyWith(backIdImagePath: imageFile.path);
+      _errorMessage = null;
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to process back of ID. Please retry.';
+      return false;
     } finally {
       _setLoading(false);
     }
@@ -81,6 +97,7 @@ class VerificationProvider extends ChangeNotifier {
     }
   }
 
+  /// Submits verification using a provided userId
   Future<bool> submit(String userId) async {
     _setLoading(true);
     try {
@@ -92,6 +109,20 @@ class VerificationProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  // ==========================================
+  // OPTION 1: Convenient wrapper for ReviewAllScreen
+  // ==========================================
+  /// Automatically fetches the logged-in Firebase user ID and submits.
+  Future<bool> submitAllDetails() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _errorMessage = 'User is not authenticated. Please log in again.';
+      notifyListeners();
+      return false;
+    }
+    return await submit(currentUser.uid);
   }
 
   void _setLoading(bool val) {

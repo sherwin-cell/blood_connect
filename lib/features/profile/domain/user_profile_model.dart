@@ -12,7 +12,13 @@ class UserProfile {
   final String? municipality;
   final String? barangay;
   final String? photoUrl;
-  final bool isVerified;
+
+  /// 'unverified' | 'pending' | 'approved' | 'rejected'
+  final String verificationStatus;
+
+  /// Admin's review notes — written on both approve & reject.
+  final String? adminNotes;
+
   final bool profileCompleted;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -29,35 +35,43 @@ class UserProfile {
     this.municipality,
     this.barangay,
     this.photoUrl,
-    this.isVerified = false,
+    this.verificationStatus = 'unverified',
+    this.adminNotes,
     this.profileCompleted = false,
     this.createdAt,
     this.updatedAt,
   });
 
+  bool get isVerified => verificationStatus == 'approved';
+  bool get isPending => verificationStatus == 'pending';
+  bool get isRejected => verificationStatus == 'rejected';
+
   factory UserProfile.fromFirestore(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic field) {
+      if (field is Timestamp) return field.toDate();
+      if (field is String) return DateTime.tryParse(field);
+      return null;
+    }
+
     return UserProfile(
-      uid: json['uid'] ?? '',
-      email: json['email'] ?? '',
-      fullName: json['fullName'] ?? json['name'] ?? '',
-      phoneNumber: json['phoneNumber'] ?? '',
-      gender: json['gender'],
-      birthDate: json['birthDate'] != null
-          ? (json['birthDate'] as Timestamp).toDate()
-          : null,
-      bloodType: json['bloodType'] ?? '',
-      province: json['province'],
-      municipality: json['municipality'],
-      barangay: json['barangay'],
-      photoUrl: json['photoUrl'],
-      isVerified: json['isVerified'] ?? false,
-      profileCompleted: json['profileCompleted'] ?? false,
-      createdAt: json['createdAt'] != null
-          ? (json['createdAt'] as Timestamp).toDate()
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? (json['updatedAt'] as Timestamp).toDate()
-          : null,
+      uid: json['uid'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      fullName:
+          (json['fullName'] ?? json['fullname'] ?? json['name'] ?? '')
+              as String,
+      phoneNumber: json['phoneNumber'] as String? ?? '',
+      gender: json['gender'] as String?,
+      birthDate: parseDate(json['birthDate']),
+      bloodType: json['bloodType'] as String? ?? '',
+      province: json['province'] as String?,
+      municipality: json['municipality'] as String?,
+      barangay: json['barangay'] as String?,
+      photoUrl: json['photoUrl'] as String?,
+      verificationStatus: json['verificationStatus'] as String? ?? 'unverified',
+      adminNotes: json['adminNotes'] as String?,
+      profileCompleted: json['profileCompleted'] as bool? ?? false,
+      createdAt: parseDate(json['createdAt']),
+      updatedAt: parseDate(json['updatedAt']),
     );
   }
 }

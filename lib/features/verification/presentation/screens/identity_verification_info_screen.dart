@@ -7,7 +7,7 @@ import '../../data/services/ocr_service.dart';
 import '../../data/services/face_detector_service.dart';
 import '../../data/services/cloudinary_service.dart';
 import '../provider/verification_provider.dart';
-import 'capture_id_screen.dart';
+import 'select_valid_id_screen.dart';
 
 class IdentityVerificationInfoScreen extends StatelessWidget {
   const IdentityVerificationInfoScreen({super.key});
@@ -19,10 +19,14 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        // Hide back when this screen is the ProfileGate root (required step).
+        automaticallyImplyLeading: false,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
       ),
       body: SafeArea(
         child: Padding(
@@ -121,7 +125,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                               firestoreService: FirestoreService(),
                             ),
                           ),
-                          child: const CaptureIdScreen(),
+                          child: const SelectValidIdScreen(),
                         ),
                       ),
                     );

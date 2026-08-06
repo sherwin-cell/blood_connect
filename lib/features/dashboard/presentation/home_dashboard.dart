@@ -1,38 +1,112 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-import '../../../core/theme/app_theme.dart'; // Adjust based on your theme path
+import '../../../core/theme/app_theme.dart';
+import '../../../core/services/firestore_service.dart';
 import '../../profile/domain/user_profile_model.dart';
 import '../../profile/presentation/complete_profile_screen.dart';
-import '../../onboarding/presentation/welcome_screen.dart';
+import '../../verification/presentation/screens/identity_verification_info_screen.dart';
+import '../../verification/presentation/screens/verification_pending_screen.dart';
+import 'post_blood_request_screen.dart';
+import 'apply_donor_screen.dart';
 
-class HomeDashboard extends StatelessWidget {
+class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
 
-  /// Real-time stream of the current user's profile document
-  Stream<UserProfile?> _getUserProfileStream() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return Stream.value(null);
+  @override
+  State<HomeDashboard> createState() => _HomeDashboardState();
+}
 
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .snapshots()
-        .map((snapshot) {
-          if (!snapshot.exists || snapshot.data() == null) return null;
-          return UserProfile.fromFirestore(snapshot.data()!);
-        });
+class _HomeDashboardState extends State<HomeDashboard> {
+  final FirestoreService _firestoreService = FirestoreService();
+  int _selectedIndex = 0;
+
+  Future<void> _signOut() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
+    }
+  }
+
+  /// Verification Guard Handler
+  void _handleProtectedFeature(
+    BuildContext context,
+    UserProfile? profile,
+    VoidCallback onApprovedAction,
+  ) {
+    final bool isVerified = profile?.isVerified ?? false;
+    final String? status = profile?.verificationStatus;
+
+    if (isVerified) {
+      onApprovedAction();
+    } else if (status == 'pending') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const VerificationPendingScreen()),
+      );
+    } else {
+      _showVerificationPromptDialog(context);
+    }
+  }
+
+  void _showVerificationPromptDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: AppColors.primaryRed),
+            SizedBox(width: 8),
+            Text('Verification Required', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          'You must complete identity verification before you can post blood requests, apply as a donor, or access matching features.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const IdentityVerificationInfoScreen(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Verify Now'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(body: Center(child: Text('No user logged in.')));
+    }
+
     return StreamBuilder<UserProfile?>(
-      stream: _getUserProfileStream(),
+      stream: _firestoreService.getUserProfileStream(user.uid),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            backgroundColor: AppColors.background,
             body: Center(
               child: CircularProgressIndicator(color: AppColors.primaryRed),
             ),
@@ -42,383 +116,127 @@ class HomeDashboard extends StatelessWidget {
         final profile = snapshot.data;
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: const Color(0xFFF9F9F9),
           appBar: AppBar(
-            backgroundColor: AppColors.primaryRed,
+            backgroundColor: Colors.transparent,
             elevation: 0,
             title: const Text(
               'Blood-Connect',
               style: TextStyle(
+                color: Colors.black87,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                fontSize: 20,
               ),
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
             actions: [
               IconButton(
-                icon: const Icon(Icons.notifications_none_rounded),
+                icon: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: Colors.black87,
+                ),
+                onPressed: () {},
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.account_circle,
+                  color: Colors.black38,
+                  size: 28,
+                ),
                 onPressed: () {
-                  // Notification handler
+                  setState(() => _selectedIndex = 2); // Switch to Profile tab
                 },
               ),
+              const SizedBox(width: 8),
             ],
           ),
-          drawer: _buildDrawer(context, profile),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Profile Summary Card
-                _buildProfileHeaderCard(context, profile),
-
-                const SizedBox(height: 24),
-
-                // 2. Quick Actions Section
-                const Text(
-                  'Quick Actions',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionCard(
-                        icon: Icons.bloodtype_rounded,
-                        title: 'Find Donors',
-                        color: Colors.red.shade700,
-                        onTap: () {},
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionCard(
-                        icon: Icons.add_alert_rounded,
-                        title: 'Request Blood',
-                        color: Colors.orange.shade800,
-                        onTap: () {},
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 28),
-
-                // 3. Urgent Blood Requests Section
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Urgent Requests',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    TextButton(onPressed: () {}, child: const Text('See All')),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _buildUrgentRequestCard(
-                  bloodType: 'O+',
-                  location: 'Sorsogon Provincial Hospital',
-                  units: '2 Units required',
-                  postedAgo: '10 mins ago',
-                ),
-                const SizedBox(height: 12),
-                _buildUrgentRequestCard(
-                  bloodType: 'A-',
-                  location: 'Gubat District Hospital',
-                  units: '1 Unit required',
-                  postedAgo: '45 mins ago',
-                ),
-              ],
+          body: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _buildHomeTab(profile),
+              _buildActivityTab(),
+              _buildNotificationTab(),
+              _buildHistoryTab(profile),
+            ],
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            selectedItemColor: AppColors.primaryRed,
+            unselectedItemColor: Colors.grey.shade400,
+            type: BottomNavigationBarType.fixed,
+            selectedLabelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
+            onTap: (index) => setState(() => _selectedIndex = index),
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_outlined),
+                activeIcon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.assignment_outlined),
+                activeIcon: Icon(Icons.assignment),
+                label: 'Activity',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.notifications_outlined),
+                activeIcon: Icon(Icons.notifications),
+                label: 'Notification',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.history),
+                label: 'History',
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  /// Profile Summary Header Card showing User Data
-  Widget _buildProfileHeaderCard(BuildContext context, UserProfile? profile) {
-    final String name = profile?.fullName.isNotEmpty == true
-        ? profile!.fullName
-        : 'Blood Donor';
+  // --- TAB BUILDERS ---
 
-    final String bloodType = profile?.bloodType.isNotEmpty == true
-        ? profile!.bloodType
-        : '--';
-
-    final String location = [
-      profile?.municipality,
-      profile?.province,
-    ].where((e) => e != null && e.isNotEmpty).join(', ');
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.primaryRed,
-            AppColors.primaryRed.withOpacity(0.85),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryRed.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
+  Widget _buildHomeTab(UserProfile? profile) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Blood Badge
-          Container(
-            width: 64,
-            height: 64,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                bloodType,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryRed,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // User info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (profile?.isVerified == true) ...[
-                      const SizedBox(width: 6),
-                      const Icon(
-                        Icons.verified_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  location.isNotEmpty ? location : 'Location not specified',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.85),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    profile?.phoneNumber ?? 'No Phone Added',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildMemberCard(profile),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Quick Access'),
+          const SizedBox(height: 12),
+          _buildQuickAccessGrid(profile),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Matching Center'),
+          const SizedBox(height: 12),
+          _buildMatchingCenterGrid(profile),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Information & Services'),
+          const SizedBox(height: 12),
+          _buildInfoServicesGrid(),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  /// Action Item Widget
-  Widget _buildActionCard({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: color.withOpacity(0.12),
-              child: Icon(icon, color: color, size: 26),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildActivityTab() => const Center(child: Text('Activity Screen'));
+  Widget _buildNotificationTab() =>
+      const Center(child: Text('Notifications Screen'));
 
-  /// Urgent Request Card Placeholder
-  Widget _buildUrgentRequestCard({
-    required String bloodType,
-    required String location,
-    required String units,
-    required String postedAgo,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.primaryRed.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                bloodType,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryRed,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  location,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$units • $postedAgo',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryRed,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Donate', style: TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Navigation Drawer
-  Widget _buildDrawer(BuildContext context, UserProfile? profile) {
-    return Drawer(
+  Widget _buildHistoryTab(UserProfile? profile) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(color: AppColors.primaryRed),
-            accountName: Text(
-              profile?.fullName ?? 'Blood Donor',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            accountEmail: Text(
-              profile?.email ?? FirebaseAuth.instance.currentUser?.email ?? '',
-            ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Text(
-                profile?.bloodType ?? '?',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryRed,
-                ),
-              ),
-            ),
-          ),
           ListTile(
-            leading: const Icon(Icons.edit_rounded, color: Colors.black87),
+            leading: const Icon(Icons.person_outline),
             title: const Text('Edit Profile'),
             onTap: () {
-              Navigator.pop(context); // Close drawer
-              Navigator.push(
-                context,
+              Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const CompleteProfileScreen(),
                 ),
@@ -426,35 +244,413 @@ class HomeDashboard extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.history_rounded, color: Colors.black87),
-            title: const Text('Donation History'),
-            onTap: () => Navigator.pop(context),
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+            onTap: _signOut,
           ),
-          const Divider(),
-          const Spacer(),
-          ListTile(
-            leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-            title: const Text(
-              'Sign Out',
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontWeight: FontWeight.bold,
+        ],
+      ),
+    );
+  }
+
+  // --- DESIGN COMPONENTS ---
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Colors.black87,
+      ),
+    );
+  }
+
+  /// Top Red Banner (Matches design)
+  Widget _buildMemberCard(UserProfile? profile) {
+    final name = profile?.fullName ?? 'Ana Santos';
+    final bool isVerified = profile?.isVerified ?? false;
+    final String memberId = profile?.uid != null
+        ? 'BC-${profile!.uid.substring(0, 5).toUpperCase()}'
+        : 'BC-00214';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE53935), // Primary Red
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Stack(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Hello,',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          isVerified ? Icons.check_circle : Icons.error_outline,
+                          color: isVerified
+                              ? Colors.lightGreenAccent
+                              : Colors.orangeAccent,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isVerified ? 'PRC-Verified User' : 'Unverified User',
+                          style: TextStyle(
+                            color: isVerified ? Colors.white : Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                height: 50,
+                width: 1,
+                color: Colors.white24,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MEMBER ID',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    memberId,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Colors.greenAccent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Available',
+                    style: TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ],
               ),
             ),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
+          ),
+        ],
+      ),
+    );
+  }
 
-              if (!context.mounted) return;
-
-              Navigator.pushAndRemoveUntil(
+  /// Quick Access Cards (Need Blood & Wants to donate)
+  Widget _buildQuickAccessGrid(UserProfile? profile) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildActionCard(
+            title: 'Need Blood?',
+            subtitle: 'Post a blood request.',
+            buttonText: 'Post Blood Request',
+            icon: Icons.water_drop_outlined,
+            iconBgColor: Colors.red.shade50,
+            iconColor: Colors.red.shade400,
+            buttonColor: Colors.red.shade50,
+            buttonTextColor: AppColors.primaryRed,
+            onPressed: () {
+              _handleProtectedFeature(
                 context,
-                MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-                (route) => false,
+                profile,
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PostBloodRequestScreen(),
+                  ),
+                ),
               );
             },
           ),
-          const SizedBox(height: 16),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildActionCard(
+            title: 'Wants to donate?',
+            subtitle: 'Become a donor.',
+            buttonText: 'Apply as Blood Donor',
+            icon: Icons.volunteer_activism_outlined,
+            iconBgColor: Colors.orange.shade50,
+            iconColor: Colors.orange.shade400,
+            buttonColor: Colors.green.shade50,
+            buttonTextColor: Colors.green.shade700,
+            onPressed: () {
+              _handleProtectedFeature(
+                context,
+                profile,
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ApplyDonorScreen()),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard({
+    required String title,
+    required String subtitle,
+    required String buttonText,
+    required IconData icon,
+    required Color iconBgColor,
+    required Color iconColor,
+    required Color buttonColor,
+    required Color buttonTextColor,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconBgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 32,
+            child: ElevatedButton(
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: buttonColor,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: EdgeInsets.zero,
+              ),
+              child: Text(
+                buttonText,
+                style: TextStyle(
+                  color: buttonTextColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  /// Matching Center Cards
+  Widget _buildMatchingCenterGrid(UserProfile? profile) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildMatchingCard(
+            title: 'Matched Donor',
+            subtitle: 'View donors who are compatible with your blood request.',
+            icon: Icons.people_outline,
+            onTap: () {
+              _handleProtectedFeature(context, profile, () {
+                // Navigate to Matched Donors Screen
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildMatchingCard(
+            title: 'Blood Requester',
+            subtitle: 'View blood requests that matched your blood type.',
+            icon: Icons.bloodtype_outlined,
+            onTap: () {
+              _handleProtectedFeature(context, profile, () {
+                // Navigate to Matched Requesters Screen
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMatchingCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: AppColors.primaryRed, size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 10,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 4-Grid Information & Services Section
+  Widget _buildInfoServicesGrid() {
+    return Row(
+      children: [
+        _buildInfoServiceItem(Icons.chat_bubble_outline, 'Chat with PRC'),
+        const SizedBox(width: 8),
+        _buildInfoServiceItem(Icons.menu_book_outlined, 'Help & Guides'),
+        const SizedBox(width: 8),
+        _buildInfoServiceItem(Icons.campaign_outlined, 'Announcements'),
+        const SizedBox(width: 8),
+        _buildInfoServiceItem(
+          Icons.person_add_alt_1_outlined,
+          'Refer a Friend',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoServiceItem(IconData icon, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: AppColors.primaryRed, size: 22),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
       ),
     );
   }

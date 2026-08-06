@@ -3,16 +3,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/auth_service.dart';
-import '../../profile/presentation/profile_gate.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class LoginSignupScreen extends StatefulWidget {
+  const LoginSignupScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<LoginSignupScreen> createState() => _LoginSignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginSignupScreenState extends State<LoginSignupScreen> {
   final _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -56,13 +55,13 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final credential = await _authService.signInWithGoogle();
+      final userCredential = await _authService.signInWithGoogle();
 
-      if (credential != null && mounted) {
-        // Explicitly route to ProfileGate after Google authentication succeeds
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ProfileGate()),
-        );
+      if (userCredential != null && mounted) {
+        // Clear pushed navigator stack so AuthGate/ProfileGate can present CompleteProfileScreen
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;

@@ -5,16 +5,16 @@ import 'package:provider/provider.dart';
 
 import '../provider/verification_provider.dart';
 import '../widgets/camera_overlay.dart';
-import 'capture_back_id_screen.dart';
+import 'selfie_screen.dart';
 
-class CaptureIdScreen extends StatefulWidget {
-  const CaptureIdScreen({super.key});
+class CaptureBackIdScreen extends StatefulWidget {
+  const CaptureBackIdScreen({super.key});
 
   @override
-  State<CaptureIdScreen> createState() => _CaptureIdScreenState();
+  State<CaptureBackIdScreen> createState() => _CaptureBackIdScreenState();
 }
 
-class _CaptureIdScreenState extends State<CaptureIdScreen>
+class _CaptureBackIdScreenState extends State<CaptureBackIdScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
   bool _isInitializing = true;
@@ -46,9 +46,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
   Future<void> _initializeCamera() async {
     try {
       final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        throw Exception('No cameras detected on this device.');
-      }
+      if (cameras.isEmpty) throw Exception('No cameras detected.');
 
       final backCamera = cameras.firstWhere(
         (cam) => cam.lensDirection == CameraLensDirection.back,
@@ -63,17 +61,13 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
 
       await _cameraController!.initialize();
     } catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Failed to initialize camera: $e');
-      }
+      if (mounted) _showErrorSnackBar('Failed to initialize camera: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isInitializing = false);
-      }
+      if (mounted) setState(() => _isInitializing = false);
     }
   }
 
-  Future<void> _captureAndProcessId() async {
+  Future<void> _captureAndProcessBackId() async {
     if (_isProcessing ||
         _cameraController == null ||
         !_cameraController!.value.isInitialized) {
@@ -97,7 +91,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
         listen: false,
       );
 
-      final bool success = await provider.processIdCard(imageFile);
+      final bool success = await provider.processBackIdCard(imageFile);
 
       if (!mounted) return;
 
@@ -113,7 +107,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
           MaterialPageRoute(
             builder: (_) => ChangeNotifierProvider.value(
               value: provider,
-              child: const CaptureBackIdScreen(),
+              child: const SelfieScreen(),
             ),
           ),
         );
@@ -124,23 +118,12 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
           await _cameraController?.resumePreview().catchError((_) {});
         }
       } else {
-        _showErrorSnackBar(
-          provider.errorMessage ??
-              'Could not read ID details. Please align your ID and try again.',
-        );
-      }
-    } on CameraException catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Camera error: ${e.description}');
+        _showErrorSnackBar('Could not process back of ID. Please try again.');
       }
     } catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Error processing ID: $e');
-      }
+      if (mounted) _showErrorSnackBar('Error capturing back ID: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -197,7 +180,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Capture Front of ID'),
+        title: const Text('Capture Back of ID'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),
@@ -212,12 +195,13 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
             const Positioned.fill(child: ColoredBox(color: Colors.black)),
 
           const CameraOverlay(),
+
           const Align(
             alignment: Alignment(0, -0.65),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                'Position the FRONT of your government ID within the frame',
+                'Position the BACK of your government ID within the frame',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -228,6 +212,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
               ),
             ),
           ),
+
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -239,13 +224,15 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
                         CircularProgressIndicator(color: Colors.white),
                         SizedBox(height: 12),
                         Text(
-                          'Scanning text with OCR...',
+                          'Processing back side...',
                           style: TextStyle(color: Colors.white, fontSize: 14),
                         ),
                       ],
                     )
                   : FloatingActionButton.large(
-                      onPressed: _isProcessing ? null : _captureAndProcessId,
+                      onPressed: _isProcessing
+                          ? null
+                          : _captureAndProcessBackId,
                       backgroundColor: Colors.redAccent,
                       shape: const CircleBorder(),
                       child: const Icon(

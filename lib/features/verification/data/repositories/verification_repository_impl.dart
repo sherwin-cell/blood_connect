@@ -34,19 +34,28 @@ class VerificationRepositoryImpl implements IVerificationRepository {
     required String userId,
     required VerificationData data,
   }) async {
-    // 1. Upload ID Image to Cloudinary
+    // 1. Upload Front ID Image to Cloudinary
     final idUrl = await cloudinaryService.uploadImage(File(data.idImagePath!));
 
-    // 2. Upload Selfie Image to Cloudinary
+    // 2. Upload Back ID Image if available
+    String? backIdUrl;
+    if (data.backIdImagePath != null && data.backIdImagePath!.isNotEmpty) {
+      backIdUrl = await cloudinaryService.uploadImage(
+        File(data.backIdImagePath!),
+      );
+    }
+
+    // 3. Upload Selfie Image to Cloudinary
     final selfieUrl = await cloudinaryService.uploadImage(
       File(data.selfiePath!),
     );
 
-    // 3. Save URLs & extracted details to Firestore for PRC Admin
+    // 4. Save URLs & extracted details to Firestore
     await firestoreService.submitVerificationRecord(
       userId: userId,
       data: data,
       idCloudinaryUrl: idUrl,
+      backIdCloudinaryUrl: backIdUrl,
       selfieCloudinaryUrl: selfieUrl,
     );
   }

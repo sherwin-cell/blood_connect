@@ -18,18 +18,15 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.blood_connect"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // FIX: Force single ABI build to prevent CMake/Ninja timing log collisions on Windows
+        // Allow support for physical devices (arm64, armeabi) AND emulators (x86_64)
         ndk {
-            abiFilters.add("arm64-v8a")
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
     }
 

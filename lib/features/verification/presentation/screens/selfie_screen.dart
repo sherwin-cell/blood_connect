@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../provider/verification_provider.dart';
-import 'verification_pending_screen.dart';
+import 'review_all_screen.dart';
 
 class SelfieScreen extends StatefulWidget {
   const SelfieScreen({super.key});
@@ -14,21 +13,38 @@ class SelfieScreen extends StatefulWidget {
   State<SelfieScreen> createState() => _SelfieScreenState();
 }
 
-class _SelfieScreenState extends State<SelfieScreen> {
+class _SelfieScreenState extends State<SelfieScreen>
+    with WidgetsBindingObserver {
   CameraController? _cameraController;
   bool _isInitializing = true;
   bool _isProcessing = false;
+  bool _isNavigatingAway = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = _cameraController;
+
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      cameraController.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initializeCamera();
+    }
   }
 
   Future<void> _initializeCamera() async {
     try {
       final cameras = await availableCameras();
-      // Select the front-facing camera for the selfie
       final frontCamera = cameras.firstWhere(
         (cam) => cam.lensDirection == CameraLensDirection.front,
         orElse: () => cameras.first,
@@ -36,7 +52,7 @@ class _SelfieScreenState extends State<SelfieScreen> {
 
       _cameraController = CameraController(
         frontCamera,
-        ResolutionPreset.medium, // Lower res is fine for ML face check
+        ResolutionPreset.medium,
         enableAudio: false,
       );
 
@@ -54,9 +70,10 @@ class _SelfieScreenState extends State<SelfieScreen> {
     }
   }
 
-  Future<void> _captureAndSubmit() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized)
+  Future<void> _captureAndProcessSelfie() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
+    }
 
     setState(() => _isProcessing = true);
 
@@ -72,12 +89,12 @@ class _SelfieScreenState extends State<SelfieScreen> {
         listen: false,
       );
 
-      // 2. Run local ML Kit Face Detection (Validation Step)
+      // 2. Run local ML Kit Face Detection
       final hasFace = await provider.processSelfie(imageFile);
 
       if (!mounted) return;
 
-      // UX Feedback: Face Check failed
+      // 3. UX Feedback: Face Check failed
       if (!hasFace) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,33 +109,30 @@ class _SelfieScreenState extends State<SelfieScreen> {
         return;
       }
 
-      // 3. User passed face check -> Submit all data to Firebase/Cloudinary
-      final String? userId = FirebaseAuth.instance.currentUser?.uid;
-
-      if (userId == null) {
-        throw Exception("User must be authenticated to submit.");
-      }
-
-      setState(() => _isProcessing = true);
-      final submissionSuccess = await provider.submit(userId);
+      // 4. Detach camera preview before pausing & pushing next route
+      setState(() {
+        _isProcessing = false;
+        _isNavigatingAway = true;
+      });
+      await _cameraController?.pausePreview().catchError((_) {});
 
       if (!mounted) return;
 
-      if (submissionSuccess) {
-        // 4. Navigate to Pending Screen upon final success
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const VerificationPendingScreen()),
-          (route) => false, // Clears the entire navigation stack
-        );
-      } else {
-        // Firebase Submission failed (e.g. network issue)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Submission failed.'),
-            backgroundColor: Colors.redAccent,
+      // 5. Face check passed -> Navigate to Review Screen
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider.value(
+            value: provider,
+            child: const ReviewAllScreen(),
           ),
-        );
+        ),
+      );
+
+      // 6. Resume camera preview if user pops back to this screen
+      if (mounted) {
+        setState(() => _isNavigatingAway = false);
+        await _cameraController?.resumePreview().catchError((_) {});
       }
     } catch (e) {
       if (mounted) {
@@ -127,7 +141,8 @@ class _SelfieScreenState extends State<SelfieScreen> {
         ).showSnackBar(SnackBar(content: Text('Unexpected error: $e')));
       }
     } finally {
-      if (mounted) {
+      // Ensure state reset if an exception prevented navigation
+      if (mounted && _isProcessing) {
         setState(() => _isProcessing = false);
       }
     }
@@ -135,6 +150,7 @@ class _SelfieScreenState extends State<SelfieScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
     super.dispose();
   }
@@ -149,12 +165,24 @@ class _SelfieScreenState extends State<SelfieScreen> {
     }
 
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.black,
         body: Center(
-          child: Text(
-            'Camera unavailable.',
-            style: TextStyle(color: Colors.white),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.videocam_off, color: Colors.white54, size: 64),
+              const SizedBox(height: 16),
+              const Text(
+                'Camera unavailable.',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _initializeCamera,
+                child: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       );
@@ -169,13 +197,18 @@ class _SelfieScreenState extends State<SelfieScreen> {
       ),
       body: Stack(
         children: [
-          // 1. Camera Viewfinder (Scaled to center)
-          Center(
-            child: AspectRatio(
-              aspectRatio: 1 / _cameraController!.value.aspectRatio,
-              child: CameraPreview(_cameraController!),
-            ),
-          ),
+          // 1. Camera Viewfinder (Only renders when active & initialized)
+          if (!_isNavigatingAway &&
+              _cameraController != null &&
+              _cameraController!.value.isInitialized)
+            Center(
+              child: AspectRatio(
+                aspectRatio: 1 / _cameraController!.value.aspectRatio,
+                child: CameraPreview(_cameraController!),
+              ),
+            )
+          else
+            const Positioned.fill(child: ColoredBox(color: Colors.black)),
 
           // 2. Instruction Banner
           const Align(
@@ -195,7 +228,7 @@ class _SelfieScreenState extends State<SelfieScreen> {
             ),
           ),
 
-          // 3. Circle Framing Overlay (Custom Painted)
+          // 3. Circle Framing Overlay
           Positioned.fill(child: CustomPaint(painter: FaceOverlayPainter())),
 
           // 4. Processing Overlay or Capture Button
@@ -216,22 +249,18 @@ class _SelfieScreenState extends State<SelfieScreen> {
                           CircularProgressIndicator(color: Colors.redAccent),
                           SizedBox(height: 16),
                           Text(
-                            'Processing and Uploading...',
+                            'Validating Face...',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Text(
-                            'Face Validation • Cloudinary Upload • Firestore Submission',
-                            style: TextStyle(color: Colors.grey, fontSize: 11),
-                          ),
                         ],
                       ),
                     )
                   : FloatingActionButton.large(
-                      onPressed: _captureAndSubmit,
+                      onPressed: _captureAndProcessSelfie,
                       backgroundColor: Colors.redAccent,
                       shape: const CircleBorder(),
                       child: const Icon(
@@ -249,47 +278,31 @@ class _SelfieScreenState extends State<SelfieScreen> {
 }
 
 /// CustomPainter to overlay a darkened background with a circular cutout
-/// guiding the user where to position their face.
 class FaceOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.black54;
-    final circlePaint = Paint()
+    final fillPaint = Paint()..color = Colors.black54;
+    final strokePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
 
-    final circlePath = Path()
-      ..addOval(
-        Rect.fromCircle(
-          center: Offset(
-            size.width / 2,
-            size.height / 2.3,
-          ), // Slightly above absolute center
-          radius: size.width * 0.35, // Adjust size as needed
-        ),
-      );
+    final center = Offset(size.width / 2, size.height / 2.3);
+    final radius = size.width * 0.35;
+    final circleRect = Rect.fromCircle(center: center, radius: radius);
 
-    // Combine paths to create the punched-out effect
+    final circlePath = Path()..addOval(circleRect);
     final backgroundPath = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
     final overlayPath = Path.combine(
       PathOperation.difference,
       backgroundPath,
       circlePath,
     );
 
-    // Draw the translucent black background
-    canvas.drawPath(overlayPath, paint);
-
-    // Draw the white circular border
-    canvas.drawOval(
-      Rect.fromCircle(
-        center: Offset(size.width / 2, size.height / 2.3),
-        radius: size.width * 0.35,
-      ),
-      circlePaint,
-    );
+    canvas.drawPath(overlayPath, fillPaint);
+    canvas.drawOval(circleRect, strokePaint);
   }
 
   @override

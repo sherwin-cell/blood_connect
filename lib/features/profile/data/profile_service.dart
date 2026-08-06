@@ -6,19 +6,27 @@ class ProfileService {
   ProfileService({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  /// Checks if the user has completed their profile
+  /// Returns a real-time stream of the user profile document for reactive navigation (AuthGate / ProfileGate).
+  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserProfileStream(
+    String uid,
+  ) {
+    return _firestore.collection('users').doc(uid).snapshots();
+  }
+
+  /// Checks once if the user has completed their profile.
   Future<bool> isProfileCompleted(String uid) async {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       if (!doc.exists) return false;
       final data = doc.data();
       return data?['profileCompleted'] == true;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
-  /// Updates existing users/{uid} document with completed profile fields
+  /// Updates existing users/{uid} document with completed profile fields.
+  /// Sets [profileCompleted] to `true` to instantly trigger reactive gate transitions.
   Future<void> updateProfile({
     required String uid,
     required String fullName,
@@ -30,6 +38,7 @@ class ProfileService {
     String? municipality,
     String? barangay,
     String? photoUrl,
+    bool profileCompleted = true,
   }) async {
     final Map<String, dynamic> updateData = {
       'fullName': fullName,
@@ -41,11 +50,11 @@ class ProfileService {
       'municipality': municipality,
       'barangay': barangay,
       'photoUrl': photoUrl,
-      'profileCompleted': true,
+      'profileCompleted': profileCompleted,
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    // Remove null optional entries to keep document clean
+    // Remove null optional entries to keep Firestore documents clean
     updateData.removeWhere((key, value) => value == null);
 
     await _firestore

@@ -1,43 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
-import '../../onboarding/presentation/welcome_screen.dart';
-import '../../profile/presentation/profile_gate.dart';
-
-class SplashScreen extends StatefulWidget {
+/// Static loading UI shown by AuthGate only while the auth stream is
+/// still resolving (ConnectionState.waiting). This widget must NEVER
+/// navigate on its own — AuthGate is the single source of truth for
+/// top-level routing and will swap this out automatically once the
+/// auth state is known.
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _decideNextRoute();
-  }
-
-  Future<void> _decideNextRoute() async {
-    // Small splash delay for logo visibility
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!mounted) return;
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      // Not logged in -> Welcome / Login
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      );
-    } else {
-      // Already logged in -> Hand off to ProfileGate
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const ProfileGate()));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

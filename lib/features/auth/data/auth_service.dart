@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../core/services/firestore_service.dart';
@@ -6,7 +7,13 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
 
-  // --- Email/password (kept for RegisterScreen, if still used there) ---
+  // Explicitly configure GoogleSignIn with the Web Client ID from google-services.json
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId:
+        '394558242984-d2unmof80o47siujfrkimcu6ljrlin5k.apps.googleusercontent.com',
+  );
+
+  // --- Email/password ---
 
   Future<UserCredential> register({
     required String email,
@@ -29,18 +36,12 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    await _googleSignIn.signOut(); // Clean up Google session
     await _auth.signOut();
   }
 
   // --- Passwordless (magic link) sign-in ---
 
-  /// TODO: Replace this URL with your actual Firebase Hosting domain
-  /// (Firebase Console -> Authentication -> Settings -> Authorized domains,
-  /// and Authentication -> Templates -> Email link sign-in). It must also
-  /// be added as an authorized domain in the Firebase Console, and your
-  /// app_links / deep-link setup (Android intent-filter, iOS associated
-  /// domain) must point at this same URL scheme, or the magic link won't
-  /// open your app.
   static const String _magicLinkUrl =
       'https://blood-connect-12ac2.firebaseapp.com/finishSignIn';
 
@@ -53,9 +54,6 @@ class AuthService {
     iOSBundleId: 'com.example.bloodConnect',
   );
 
-  /// Sends a magic sign-in link to [email]. The caller (LoginScreen)
-  /// is responsible for saving the email locally (e.g. SharedPreferences)
-  /// so it can be reused when the link is tapped later.
   Future<void> sendPasswordlessLink(String email) async {
     await _auth.sendSignInLinkToEmail(
       email: email,
@@ -63,12 +61,10 @@ class AuthService {
     );
   }
 
-  /// True if [link] is a valid Firebase email sign-in link.
   bool isSignInWithEmailLink(String link) {
     return _auth.isSignInWithEmailLink(link);
   }
 
-  /// Completes sign-in using the emailed magic link.
   Future<UserCredential> signInWithEmailLink({
     required String email,
     required String emailLink,
@@ -79,11 +75,14 @@ class AuthService {
   // --- Google sign-in ---
 
   /// Signs in with Google. Returns null if the user cancels the picker.
-  /// If this is a brand-new Firebase user, also creates their Firestore
-  /// profile doc so CompleteProfileScreen / ProfileGate work correctly.
+  /// Safely verifies Firestore user document existence so CompleteProfileScreen
+  /// triggers accurately for new or partially set up users.
   Future<UserCredential?> signInWithGoogle() async {
-    final googleUser = await GoogleSignIn().signIn();
-    if (googleUser == null) return null; // user cancelled
+    // Clear old cached session so account selection prompt always appears
+    await _googleSignIn.signOut();
+
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) return null; // User cancelled
 
     final googleAuth = await googleUser.authentication;
     final credential = GoogleAuthProvider.credential(
@@ -94,12 +93,20 @@ class AuthService {
     final userCredential = await _auth.signInWithCredential(credential);
     final user = userCredential.user;
 
-    if (user != null && userCredential.additionalUserInfo?.isNewUser == true) {
-      await _firestoreService.createUserProfile(
-        uid: user.uid,
-        fullname: user.displayName ?? 'New User',
-        email: user.email ?? '',
-      );
+    if (user != null) {
+      // Check if the user document exists in Firestore directly
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!userDoc.exists) {
+        await _firestoreService.createUserProfile(
+          uid: user.uid,
+          fullname: user.displayName ?? 'New User',
+          email: user.email ?? '',
+        );
+      }
     }
 
     return userCredential;
@@ -107,9 +114,6 @@ class AuthService {
 
   // --- Shared error-message mapping ---
 
-  /// Maps Firebase Auth error codes to clear, user-facing messages.
-  /// Shared by LoginScreen, RegisterScreen, and anywhere else that
-  /// catches a FirebaseAuthException.
   static String getErrorMessage(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':
