@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/profile_service.dart';
@@ -16,18 +15,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _profileService = ProfileService();
 
-  final _fullNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _provinceController = TextEditingController();
   final _municipalityController = TextEditingController();
   final _barangayController = TextEditingController();
 
-  String? _selectedGender;
-  DateTime? _selectedBirthDate;
   String? _selectedBloodType;
   bool _isLoading = false;
 
-  final List<String> _genders = ['Male', 'Female', 'Prefer not to say'];
   final List<String> _bloodTypes = [
     'A+',
     'A-',
@@ -42,55 +37,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill user information if available from FirebaseAuth
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      if (user.displayName != null && user.displayName!.isNotEmpty) {
-        _fullNameController.text = user.displayName!;
-      }
-      if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
-        _phoneController.text = user.phoneNumber!;
-      }
+    if (user != null &&
+        user.phoneNumber != null &&
+        user.phoneNumber!.isNotEmpty) {
+      _phoneController.text = user.phoneNumber!;
     }
   }
 
   @override
   void dispose() {
-    _fullNameController.dispose();
     _phoneController.dispose();
     _provinceController.dispose();
     _municipalityController.dispose();
     _barangayController.dispose();
     super.dispose();
-  }
-
-  Future<void> _selectBirthDate(BuildContext context) async {
-    final DateTime initialDate = DateTime(2000, 1, 1);
-    final DateTime firstDate = DateTime(1930);
-    final DateTime lastDate = DateTime.now();
-
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedBirthDate ?? initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.primaryRed,
-              onPrimary: Colors.white,
-              onSurface: Colors.black87,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() => _selectedBirthDate = picked);
-    }
   }
 
   Future<void> _onSaveProfile() async {
@@ -105,14 +66,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Update user details in Firestore
+      // Save operational contact & location data to user profile
       await _profileService.updateProfile(
         uid: user.uid,
-        fullName: _fullNameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         bloodType: _selectedBloodType!,
-        gender: _selectedGender,
-        birthDate: _selectedBirthDate,
         province: _provinceController.text.trim().isEmpty
             ? null
             : _provinceController.text.trim(),
@@ -124,9 +82,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             : _barangayController.text.trim(),
       );
 
-      // 2. No Navigator.push needed here!
-      // ProfileGate listens to the user profile stream in real-time and will
-      // automatically swap this screen to IdentityVerificationInfoScreen.
+      // ProfileGate automatically routes user to Identity Verification
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to save profile: $e');
@@ -180,71 +136,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Help us personalize your Blood-Connect experience.',
+                        'Your official identity (Name, DOB, Gender) will be verified from your ID in the next step.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: Colors.black.withOpacity(0.6),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 28),
-
-                // Photo Placeholder
-                Center(
-                  child: GestureDetector(
-                    onTap: () {
-                      // Optional: Photo picking logic
-                    },
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 46,
-                          backgroundColor: Colors.black.withOpacity(0.06),
-                          child: const Icon(
-                            Icons.person_rounded,
-                            size: 52,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryRed,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 32),
 
-                // Personal Information
-                const _SectionTitle('Personal Information'),
+                // Contact Information Section
+                const _SectionTitle('Contact Details'),
                 const SizedBox(height: 12),
-
-                const _FieldLabel('Full Name *'),
-                TextFormField(
-                  controller: _fullNameController,
-                  decoration: _inputDecoration('e.g. Juan Dela Cruz'),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Full Name is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
 
                 const _FieldLabel('Phone Number *'),
                 TextFormField(
@@ -261,53 +167,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
-
-                const _FieldLabel('Gender'),
-                DropdownButtonFormField<String>(
-                  value: _selectedGender,
-                  decoration: _inputDecoration('Select gender'),
-                  items: _genders
-                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                      .toList(),
-                  onChanged: (val) => setState(() => _selectedGender = val),
-                ),
-                const SizedBox(height: 16),
-
-                const _FieldLabel('Date of Birth'),
-                InkWell(
-                  onTap: () => _selectBirthDate(context),
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: _inputDecoration('Select Date of Birth'),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _selectedBirthDate == null
-                              ? 'YYYY-MM-DD'
-                              : DateFormat(
-                                  'yyyy-MM-dd',
-                                ).format(_selectedBirthDate!),
-                          style: TextStyle(
-                            color: _selectedBirthDate == null
-                                ? Colors.black.withOpacity(0.35)
-                                : Colors.black87,
-                          ),
-                        ),
-                        Icon(
-                          Icons.calendar_today_rounded,
-                          size: 18,
-                          color: AppColors.primaryRed,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 28),
 
-                // Blood Information
-                const _SectionTitle('Blood Information'),
+                // Medical Information Section
+                const _SectionTitle('Medical Details'),
                 const SizedBox(height: 12),
 
                 const _FieldLabel('Blood Type *'),
@@ -326,24 +189,33 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 const _SectionTitle('Address'),
                 const SizedBox(height: 12),
 
-                const _FieldLabel('Province'),
+                const _FieldLabel('Province *'),
                 TextFormField(
                   controller: _provinceController,
                   decoration: _inputDecoration('e.g. Sorsogon'),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Province is required'
+                      : null,
                 ),
                 const SizedBox(height: 16),
 
-                const _FieldLabel('Municipality / City'),
+                const _FieldLabel('Municipality / City *'),
                 TextFormField(
                   controller: _municipalityController,
-                  decoration: _inputDecoration('e.g. Sorsogon City'),
+                  decoration: _inputDecoration('e.g. Gubat'),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Municipality is required'
+                      : null,
                 ),
                 const SizedBox(height: 16),
 
-                const _FieldLabel('Barangay'),
+                const _FieldLabel('Barangay *'),
                 TextFormField(
                   controller: _barangayController,
-                  decoration: _inputDecoration('e.g. Sirangan'),
+                  decoration: _inputDecoration('e.g. Manook'),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Barangay is required'
+                      : null,
                 ),
                 const SizedBox(height: 36),
 

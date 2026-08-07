@@ -1,38 +1,46 @@
 class VerificationData {
-  final String? idType;
   final String? idImagePath;
-  final String? backIdImagePath; // <--- Add this field
+  final String? backIdImagePath;
   final String? selfiePath;
-  final String? extractedName;
+  final String? idType;
   final String? idNumber;
+  final String? extractedName;
+  final String? extractedBirthDate;
+  final String? extractedGender;
   final bool hasDetectedFace;
 
   const VerificationData({
-    this.idType,
     this.idImagePath,
     this.backIdImagePath,
     this.selfiePath,
-    this.extractedName,
+    this.idType,
     this.idNumber,
+    this.extractedName,
+    this.extractedBirthDate,
+    this.extractedGender,
     this.hasDetectedFace = false,
   });
 
   VerificationData copyWith({
-    String? idType,
     String? idImagePath,
     String? backIdImagePath,
     String? selfiePath,
-    String? extractedName,
+    String? idType,
     String? idNumber,
+    String? extractedName,
+    String? extractedBirthDate,
+    String? extractedGender,
     bool? hasDetectedFace,
   }) {
     return VerificationData(
-      idType: idType ?? this.idType,
       idImagePath: idImagePath ?? this.idImagePath,
       backIdImagePath: backIdImagePath ?? this.backIdImagePath,
       selfiePath: selfiePath ?? this.selfiePath,
-      extractedName: extractedName ?? this.extractedName,
+      idType: idType ?? this.idType,
       idNumber: idNumber ?? this.idNumber,
+      extractedName: extractedName ?? this.extractedName,
+      extractedBirthDate: extractedBirthDate ?? this.extractedBirthDate,
+      extractedGender: extractedGender ?? this.extractedGender,
       hasDetectedFace: hasDetectedFace ?? this.hasDetectedFace,
     );
   }

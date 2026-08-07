@@ -20,7 +20,7 @@ class VerificationRepositoryImpl implements IVerificationRepository {
   });
 
   @override
-  Future<Map<String, String>> processIdOcr(File imageFile) async {
+  Future<Map<String, String?>> processIdOcr(File imageFile) async {
     return await ocrService.extractIdDetails(imageFile);
   }
 

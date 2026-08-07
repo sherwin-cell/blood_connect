@@ -15,6 +15,8 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _nameController;
+  late final TextEditingController _dobController;
+  late final TextEditingController _genderController;
   late final TextEditingController _idNumberController;
 
   bool _isSubmitting = false;
@@ -24,12 +26,20 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
     super.initState();
     final provider = Provider.of<VerificationProvider>(context, listen: false);
     _nameController = TextEditingController(text: provider.data.extractedName);
+    _dobController = TextEditingController(
+      text: provider.data.extractedBirthDate,
+    );
+    _genderController = TextEditingController(
+      text: provider.data.extractedGender,
+    );
     _idNumberController = TextEditingController(text: provider.data.idNumber);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _dobController.dispose();
+    _genderController.dispose();
     _idNumberController.dispose();
     super.dispose();
   }
@@ -45,21 +55,20 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
         listen: false,
       );
 
-      // 1. Save final edited text fields to provider
+      // 1. Update verification provider with final user-reviewed OCR data
       provider.updateExtractedData(
         correctedName: _nameController.text.trim().toUpperCase(),
+        correctedBirthDate: _dobController.text.trim(),
+        correctedGender: _genderController.text.trim(),
         correctedIdNumber: _idNumberController.text.trim(),
       );
 
-      // 2. Trigger final upload / submit API call
+      // 2. Submit payload (writes verified details to `users` & `verifications`)
       final success = await provider.submitAllDetails();
 
       if (!mounted) return;
 
       if (success) {
-        // 3. Pop back to the home dashboard on the main stack.
-        // No pushAndRemoveUntil — ProfileGate/AuthGate automatically handles
-        // updating screen state based on the new pending status in Firestore.
         Navigator.of(context).popUntil((route) => route.isFirst);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -90,7 +99,7 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
     final verificationData = context.watch<VerificationProvider>().data;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Review All Details')),
+      appBar: AppBar(title: const Text('Review Verification Details')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -98,9 +107,24 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Please double-check all captured photos and extracted information before submitting.',
-                style: TextStyle(fontSize: 16, color: Colors.black87),
+              const Card(
+                color: Color(0xFFE3F2FD),
+                elevation: 0,
+                child: Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Double-check the text extracted from your ID. Correct any OCR mistakes before submitting.',
+                          style: TextStyle(fontSize: 13, color: Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -136,9 +160,9 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
               ),
               const SizedBox(height: 32),
 
-              // --- 2. EXTRACTED DATA FIELDS ---
+              // --- 2. EXTRACTED IDENTITY DATA FIELDS ---
               const Text(
-                'Extracted Information',
+                'Verified Identity Information',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
@@ -147,8 +171,9 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                 controller: _nameController,
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
-                  labelText: 'Full Name',
+                  labelText: 'Full Name (from ID)',
                   prefixIcon: Icon(Icons.person_outline),
+                  suffixIcon: Icon(Icons.edit_note),
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
@@ -158,14 +183,43 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _dobController,
+                decoration: const InputDecoration(
+                  labelText: 'Date of Birth (YYYY-MM-DD)',
+                  prefixIcon: Icon(Icons.cake_outlined),
+                  suffixIcon: Icon(Icons.edit_note),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter your birth date.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _genderController,
+                decoration: const InputDecoration(
+                  labelText: 'Gender',
+                  prefixIcon: Icon(Icons.wc_outlined),
+                  suffixIcon: Icon(Icons.edit_note),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
 
               TextFormField(
                 controller: _idNumberController,
                 keyboardType: TextInputType.text,
                 decoration: const InputDecoration(
-                  labelText: 'ID Number',
+                  labelText: 'Government ID Number',
                   prefixIcon: Icon(Icons.badge_outlined),
+                  suffixIcon: Icon(Icons.edit_note),
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
@@ -201,7 +255,7 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                           ),
                         )
                       : const Text(
-                          'Submit Verification',
+                          'Confirm & Submit Verification',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

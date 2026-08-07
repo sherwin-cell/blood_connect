@@ -29,37 +29,24 @@ class ProfileService {
   /// Sets [profileCompleted] to `true` to instantly trigger reactive gate transitions.
   Future<void> updateProfile({
     required String uid,
-    required String fullName,
+    String? fullName, // Made optional since identity verification extracts this
     required String phoneNumber,
     required String bloodType,
-    String? gender,
-    DateTime? birthDate,
     String? province,
     String? municipality,
     String? barangay,
-    String? photoUrl,
-    bool profileCompleted = true,
   }) async {
-    final Map<String, dynamic> updateData = {
-      'fullName': fullName,
+    final Map<String, dynamic> data = {
       'phoneNumber': phoneNumber,
       'bloodType': bloodType,
-      'gender': gender,
-      'birthDate': birthDate != null ? Timestamp.fromDate(birthDate) : null,
-      'province': province,
-      'municipality': municipality,
-      'barangay': barangay,
-      'photoUrl': photoUrl,
-      'profileCompleted': profileCompleted,
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    // Remove null optional entries to keep Firestore documents clean
-    updateData.removeWhere((key, value) => value == null);
+    if (fullName != null) data['fullName'] = fullName;
+    if (province != null) data['province'] = province;
+    if (municipality != null) data['municipality'] = municipality;
+    if (barangay != null) data['barangay'] = barangay;
 
-    await _firestore
-        .collection('users')
-        .doc(uid)
-        .set(updateData, SetOptions(merge: true));
+    await _firestore.collection('users').doc(uid).update(data);
   }
 }

@@ -25,14 +25,18 @@ class VerificationProvider extends ChangeNotifier {
   }
 
   /// Updates the internal state with manual corrections made by the user
-  /// on the Review ID Screen.
+  /// on the Review / ReviewAll Screen.
   void updateExtractedData({
-    required String correctedName,
-    required String correctedIdNumber,
+    String? correctedName,
+    String? correctedBirthDate,
+    String? correctedGender,
+    String? correctedIdNumber,
   }) {
     _data = _data.copyWith(
-      extractedName: correctedName,
-      idNumber: correctedIdNumber,
+      extractedName: correctedName ?? _data.extractedName,
+      extractedBirthDate: correctedBirthDate ?? _data.extractedBirthDate,
+      extractedGender: correctedGender ?? _data.extractedGender,
+      idNumber: correctedIdNumber ?? _data.idNumber,
     );
     notifyListeners();
   }
@@ -45,13 +49,13 @@ class VerificationProvider extends ChangeNotifier {
       _data = _data.copyWith(
         idImagePath: imageFile.path,
         extractedName: ocrResults['extractedName'],
+        extractedBirthDate: ocrResults['extractedBirthDate'],
+        extractedGender: ocrResults['extractedGender'],
         idNumber: ocrResults['idNumber'],
       );
       _errorMessage = null;
       return true; // ✅ Success!
     } on NoIdDetectedException catch (e) {
-      // The photo didn't contain enough readable text to be a real ID —
-      // surface the specific reason instead of a generic failure message.
       _errorMessage = e.message;
       return false;
     } catch (e) {
@@ -112,7 +116,7 @@ class VerificationProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // OPTION 1: Convenient wrapper for ReviewAllScreen
+  // Convenient wrapper for ReviewAllScreen
   // ==========================================
   /// Automatically fetches the logged-in Firebase user ID and submits.
   Future<bool> submitAllDetails() async {

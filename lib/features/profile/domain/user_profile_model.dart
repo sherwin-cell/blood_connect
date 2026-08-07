@@ -26,7 +26,7 @@ class UserProfile {
   UserProfile({
     required this.uid,
     required this.email,
-    required this.fullName,
+    this.fullName = '',
     required this.phoneNumber,
     this.gender,
     this.birthDate,
@@ -49,7 +49,9 @@ class UserProfile {
   factory UserProfile.fromFirestore(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic field) {
       if (field is Timestamp) return field.toDate();
-      if (field is String) return DateTime.tryParse(field);
+      if (field is String && field.isNotEmpty) {
+        return DateTime.tryParse(field);
+      }
       return null;
     }
 
@@ -73,5 +75,24 @@ class UserProfile {
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid,
+      'email': email,
+      'fullName': fullName,
+      'phoneNumber': phoneNumber,
+      if (gender != null) 'gender': gender,
+      if (birthDate != null) 'birthDate': birthDate!.toIso8601String(),
+      'bloodType': bloodType,
+      if (province != null) 'province': province,
+      if (municipality != null) 'municipality': municipality,
+      if (barangay != null) 'barangay': barangay,
+      if (photoUrl != null) 'photoUrl': photoUrl,
+      'verificationStatus': verificationStatus,
+      if (adminNotes != null) 'adminNotes': adminNotes,
+      'profileCompleted': profileCompleted,
+    };
   }
 }

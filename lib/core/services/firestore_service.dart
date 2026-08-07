@@ -30,12 +30,12 @@ class FirestoreService {
   /// Creates initial user profile on registration or Google Sign-In
   Future<void> createUserProfile({
     required String uid,
-    required String fullname,
+    String? fullname,
     required String email,
   }) async {
     await _firestore.collection('users').doc(uid).set({
       'uid': uid,
-      'fullName': fullname,
+      if (fullname != null) 'fullName': fullname,
       'email': email,
       'profileCompleted': false,
       'verificationStatus': 'unverified',
@@ -43,10 +43,12 @@ class FirestoreService {
     }, SetOptions(merge: true));
   }
 
-  /// Called by CompleteProfileScreen when saving form details
+  /// Called by CompleteProfileScreen when saving form details.
+  /// Note: fullName, gender, and birthDate are made optional because
+  /// official identity details are verified in the OCR Verification stage.
   Future<void> updateProfile({
     required String uid,
-    required String fullName,
+    String? fullName,
     required String phoneNumber,
     required String bloodType,
     String? gender,
@@ -57,7 +59,7 @@ class FirestoreService {
   }) async {
     await _firestore.collection('users').doc(uid).set({
       'uid': uid,
-      'fullName': fullName,
+      if (fullName != null) 'fullName': fullName,
       'phoneNumber': phoneNumber,
       'bloodType': bloodType,
       if (gender != null) 'gender': gender,
@@ -65,6 +67,7 @@ class FirestoreService {
       if (province != null) 'province': province,
       if (municipality != null) 'municipality': municipality,
       if (barangay != null) 'barangay': barangay,
+      'profileCompleted': true,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -88,6 +91,7 @@ class FirestoreService {
   // ==========================================
 
   /// Saves the user's identity verification submission for PRC Admin review.
+  /// Automatically updates official identity details on the user record.
   Future<void> submitVerificationRecord({
     required String userId,
     required VerificationData data,
@@ -97,22 +101,29 @@ class FirestoreService {
   }) async {
     final batch = _firestore.batch();
 
+    // 1. Create/Update verification record for admin audit
     final verificationRef = _firestore.collection('verifications').doc(userId);
     batch.set(verificationRef, {
       'userId': userId,
       'idType': data.idType,
-      'extractedName': data.extractedName,
       'idNumber': data.idNumber,
+      'extractedName': data.extractedName,
+      'extractedBirthDate': data.extractedBirthDate,
+      'extractedGender': data.extractedGender,
       'idPhotoUrl': idCloudinaryUrl,
       'backIdPhotoUrl': backIdCloudinaryUrl,
       'selfieUrl': selfieCloudinaryUrl,
       'hasDetectedFace': data.hasDetectedFace,
       'status': 'pending',
       'submittedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
 
+    // 2. Atomically sync extracted identity details & status to `users` profile
     final userRef = _firestore.collection('users').doc(userId);
     batch.set(userRef, {
+      if (data.extractedName != null) 'fullName': data.extractedName,
+      if (data.extractedBirthDate != null) 'birthDate': data.extractedBirthDate,
+      if (data.extractedGender != null) 'gender': data.extractedGender,
       'verificationStatus': 'pending',
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
