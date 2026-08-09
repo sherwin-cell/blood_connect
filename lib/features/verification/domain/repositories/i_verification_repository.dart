@@ -9,6 +9,12 @@ abstract class IVerificationRepository {
   /// Check if a face exists in the captured selfie file
   Future<bool> detectFace(File imageFile);
 
+  /// Count faces in an image (ID or selfie).
+  Future<int> countFaces(File imageFile);
+
+  /// Crop the primary face from an image for ARSA comparison.
+  Future<File?> cropPrimaryFace(File imageFile);
+
   /// Upload photos and create a submission record in Firebase
   Future<void> submitVerification({
     required String userId,

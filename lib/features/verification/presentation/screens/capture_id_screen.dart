@@ -57,7 +57,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
 
       _cameraController = CameraController(
         backCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
       );
 

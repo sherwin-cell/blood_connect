@@ -6,6 +6,7 @@ import '../../data/repositories/verification_repository_impl.dart'; // adjust pa
 import '../../data/services/ocr_service.dart';
 import '../../data/services/face_detector_service.dart';
 import '../../data/services/cloudinary_service.dart';
+import '../../data/services/arsa_face_service.dart'; // 1. Added ARSA Service Import
 import '../provider/verification_provider.dart';
 import 'select_valid_id_screen.dart';
 
@@ -118,6 +119,11 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (_) => ChangeNotifierProvider(
                           create: (_) => VerificationProvider(
+                            // DEV ONLY: API key in the client for local testing.
+                            // Production must proxy ARSA via a backend/Cloud Function.
+                            arsaFaceService: ArsaFaceService(
+                              'eb3e143543cc1eee84640d94770a6e290bfc86bb5f65c5ef4099e76116013e90',
+                            ),
                             repository: VerificationRepositoryImpl(
                               ocrService: OcrService(),
                               faceDetectorService: FaceDetectorService(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
+import '../../auth/data/auth_service.dart';
 import '../../profile/domain/user_profile_model.dart';
 import '../../profile/presentation/complete_profile_screen.dart';
 import '../../verification/presentation/screens/identity_verification_info_screen.dart';
@@ -18,11 +19,14 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> {
   final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService =
+      AuthService(); // Integrated AuthService instance
   int _selectedIndex = 0;
 
   Future<void> _signOut() async {
     try {
-      await FirebaseAuth.instance.signOut();
+      // Calls AuthService logout to clear GoogleSignIn + FirebaseAuth sessions
+      await _authService.logout();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -143,7 +147,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
                   size: 28,
                 ),
                 onPressed: () {
-                  setState(() => _selectedIndex = 2); // Switch to Profile tab
+                  // Index 3 matches the History/Profile tab where sign out resides
+                  setState(() => _selectedIndex = 3);
                 },
               ),
               const SizedBox(width: 8),
@@ -266,7 +271,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Top Red Banner (Matches design)
+  /// Top Red Banner
   Widget _buildMemberCard(UserProfile? profile) {
     final name = profile?.fullName ?? 'Ana Santos';
     final bool isVerified = profile?.isVerified ?? false;
@@ -278,7 +283,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFE53935), // Primary Red
+        color: const Color(0xFFE53935),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Stack(
@@ -392,7 +397,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Quick Access Cards (Need Blood & Wants to donate)
+  /// Quick Access Cards
   Widget _buildQuickAccessGrid(UserProfile? profile) {
     return Row(
       children: [

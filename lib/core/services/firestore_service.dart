@@ -44,8 +44,6 @@ class FirestoreService {
   }
 
   /// Called by CompleteProfileScreen when saving form details.
-  /// Note: fullName, gender, and birthDate are made optional because
-  /// official identity details are verified in the OCR Verification stage.
   Future<void> updateProfile({
     required String uid,
     String? fullName,
@@ -90,16 +88,25 @@ class FirestoreService {
   // IDENTITY VERIFICATION METHODS
   // ==========================================
 
-  /// Saves the user's identity verification submission for PRC Admin review.
-  /// Automatically updates official identity details on the user record.
+  /// Saves the user's identity verification submission along with ARSA Face API
+  /// comparison scores for PRC Admin review.
+  ///
+  /// Caller must only invoke this after a successful ARSA comparison.
+  /// Status remains `pending` for admin review — never auto-verified here.
   Future<void> submitVerificationRecord({
     required String userId,
     required VerificationData data,
     required String idCloudinaryUrl,
     String? backIdCloudinaryUrl,
     required String selfieCloudinaryUrl,
+    double? faceMatchConfidence,
+    bool? faceMatchPassed,
   }) async {
     final batch = _firestore.batch();
+
+    final double? confidenceScore =
+        faceMatchConfidence ?? data.faceMatchConfidence;
+    final bool? matchPassed = faceMatchPassed ?? data.faceMatchPassed;
 
     // 1. Create/Update verification record for admin audit
     final verificationRef = _firestore.collection('verifications').doc(userId);
@@ -114,6 +121,9 @@ class FirestoreService {
       'backIdPhotoUrl': backIdCloudinaryUrl,
       'selfieUrl': selfieCloudinaryUrl,
       'hasDetectedFace': data.hasDetectedFace,
+      'faceMatchConfidence': confidenceScore,
+      'faceMatchPassed': matchPassed,
+      'verificationProvider': data.verificationProvider ?? 'arsa',
       'status': 'pending',
       'submittedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

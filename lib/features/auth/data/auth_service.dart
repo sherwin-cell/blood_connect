@@ -7,11 +7,20 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
 
-  // Explicitly configure GoogleSignIn with the Web Client ID from google-services.json
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId:
-        '394558242984-d2unmof80o47siujfrkimcu6ljrlin5k.apps.googleusercontent.com',
-  );
+  // 1. GoogleSignIn instance (Singleton pattern in v7.x)
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  bool _isInitialized = false;
+
+  static const String _serverClientId =
+      '394558242984-d2unmof80o47siujfrkimcu6ljrlin5k.apps.googleusercontent.com';
+
+  /// Ensures google_sign_in 7.x is properly initialized before any calls
+  Future<void> _ensureInitialized() async {
+    if (!_isInitialized) {
+      await _googleSignIn.initialize(serverClientId: _serverClientId);
+      _isInitialized = true;
+    }
+  }
 
   // --- Email/password ---
 
@@ -36,7 +45,9 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    await _googleSignIn.signOut(); // Clean up Google session
+    await _ensureInitialized();
+    // Clears local session so the next sign-in prompts the account picker
+    await _googleSignIn.signOut();
     await _auth.signOut();
   }
 
@@ -74,19 +85,22 @@ class AuthService {
 
   // --- Google sign-in ---
 
-  /// Signs in with Google. Returns null if the user cancels the picker.
-  /// Safely verifies Firestore user document existence so CompleteProfileScreen
-  /// triggers accurately for new or partially set up users.
   Future<UserCredential?> signInWithGoogle() async {
-    // Clear old cached session so account selection prompt always appears
-    await _googleSignIn.signOut();
+    await _ensureInitialized();
 
-    final googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) return null; // User cancelled
+    // Force clear any active/cached session so the OS account selection prompt always appears
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {
+      // Ignore if no user was signed in previously
+    }
 
-    final googleAuth = await googleUser.authentication;
+    // Displays native bottom sheet with saved accounts (Account A, Account B, Add Account)
+    final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+
+    final googleAuth = googleUser.authentication;
+
     final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
 
@@ -94,7 +108,6 @@ class AuthService {
     final user = userCredential.user;
 
     if (user != null) {
-      // Check if the user document exists in Firestore directly
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
