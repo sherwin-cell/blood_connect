@@ -27,7 +27,37 @@ class FirestoreService {
     return UserProfile.fromFirestore(data);
   }
 
-  /// Creates initial user profile on registration or Google Sign-In
+  /// Looks up an existing Blood-Connect profile by email (case-insensitive).
+  /// Used by Google login-only to avoid calling Firebase Auth when unknown.
+  Future<UserProfile?> findUserProfileByEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+
+    final snapshot = await _firestore
+        .collection('users')
+        .where('email', isEqualTo: normalized)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      // Legacy profiles may have been stored with original casing
+      final fallback = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email.trim())
+          .limit(1)
+          .get();
+      if (fallback.docs.isEmpty) return null;
+      final data = fallback.docs.first.data();
+      data['uid'] = data['uid'] ?? fallback.docs.first.id;
+      return UserProfile.fromFirestore(data);
+    }
+
+    final data = snapshot.docs.first.data();
+    data['uid'] = data['uid'] ?? snapshot.docs.first.id;
+    return UserProfile.fromFirestore(data);
+  }
+
+  /// Creates initial user profile on registration only.
   Future<void> createUserProfile({
     required String uid,
     String? fullname,
@@ -36,32 +66,24 @@ class FirestoreService {
     await _firestore.collection('users').doc(uid).set({
       'uid': uid,
       if (fullname != null) 'fullName': fullname,
-      'email': email,
+      'email': email.trim().toLowerCase(),
       'profileCompleted': false,
       'verificationStatus': 'unverified',
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
-  /// Called by CompleteProfileScreen when saving form details.
+  /// Called by CompleteProfileScreen when saving operational contact & location details.
   Future<void> updateProfile({
     required String uid,
-    String? fullName,
     required String phoneNumber,
-    required String bloodType,
-    String? gender,
-    DateTime? birthDate,
     String? province,
     String? municipality,
     String? barangay,
   }) async {
     await _firestore.collection('users').doc(uid).set({
       'uid': uid,
-      if (fullName != null) 'fullName': fullName,
       'phoneNumber': phoneNumber,
-      'bloodType': bloodType,
-      if (gender != null) 'gender': gender,
-      if (birthDate != null) 'birthDate': Timestamp.fromDate(birthDate),
       if (province != null) 'province': province,
       if (municipality != null) 'municipality': municipality,
       if (barangay != null) 'barangay': barangay,

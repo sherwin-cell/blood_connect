@@ -1,13 +1,13 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:app_links/app_links.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_options.dart';
 import 'features/auth/presentation/auth_gate.dart';
-import 'features/auth/data/auth_service.dart';
-import 'core/services/firestore_service.dart';
+import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/register_screen.dart';
+import 'features/auth/presentation/forgot_password_screen.dart';
+import 'features/auth/presentation/email_verification_screen.dart';
+import 'features/onboarding/presentation/welcome_screen.dart'; // Ensure path is correct
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,94 +15,8 @@ Future<void> main() async {
   runApp(const BloodConnectApp());
 }
 
-class BloodConnectApp extends StatefulWidget {
+class BloodConnectApp extends StatelessWidget {
   const BloodConnectApp({super.key});
-
-  @override
-  State<BloodConnectApp> createState() => _BloodConnectAppState();
-}
-
-class _BloodConnectAppState extends State<BloodConnectApp> {
-  final _authService = AuthService();
-  final _firestoreService = FirestoreService();
-
-  late final AppLinks _appLinks;
-  StreamSubscription<Uri>? _linkSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initPasswordlessLinkListener();
-    });
-  }
-
-  Future<void> _initPasswordlessLinkListener() async {
-    _appLinks = AppLinks();
-
-    try {
-      final initialUri = await _appLinks.getInitialLink();
-      if (initialUri != null) {
-        await _handleIncomingLink(initialUri.toString());
-      }
-    } catch (e) {
-      debugPrint('Error getting initial deep link: $e');
-    }
-
-    _linkSubscription = _appLinks.uriLinkStream.listen(
-      (uri) {
-        _handleIncomingLink(uri.toString());
-      },
-      onError: (err) {
-        debugPrint('Error listening to deep links: $err');
-      },
-    );
-  }
-
-  Future<void> _handleIncomingLink(String link) async {
-    if (_authService.isSignInWithEmailLink(link)) {
-      final prefs = await SharedPreferences.getInstance();
-      final email = prefs.getString('emailForSignIn');
-      final pendingName = prefs.getString('pendingUserName');
-
-      if (email != null && email.isNotEmpty) {
-        try {
-          final credential = await _authService.signInWithEmailLink(
-            email: email,
-            emailLink: link,
-          );
-
-          final user = credential.user;
-          if (user != null) {
-            final nameToUse = pendingName ?? user.displayName ?? 'New User';
-
-            if (user.displayName == null || user.displayName != nameToUse) {
-              await user.updateDisplayName(nameToUse);
-            }
-
-            await _firestoreService.createUserProfile(
-              uid: user.uid,
-              fullname: nameToUse,
-              email: user.email ?? email,
-            );
-          }
-
-          await prefs.remove('emailForSignIn');
-          await prefs.remove('pendingUserName');
-
-          debugPrint('Successfully authenticated with magic link!');
-        } catch (e) {
-          debugPrint('Error signing in with link: $e');
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _linkSubscription?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +24,58 @@ class _BloodConnectAppState extends State<BloodConnectApp> {
       title: 'Blood-Connect',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Roboto'),
-      home: const AuthGate(),
+      home: const SplashScreen(),
+      routes: {
+        '/welcome': (context) => const WelcomeScreen(),
+        '/auth-gate': (context) => const AuthGate(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/verify-email': (context) => const EmailVerificationScreen(),
+      },
+    );
+  }
+}
+
+/// Initial Splash Screen component
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _navigateToNext();
+  }
+
+  Future<void> _navigateToNext() async {
+    // Simulated splash delay (2 seconds)
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    // Navigates directly to the WelcomeScreen first
+    Navigator.of(context).pushReplacementNamed('/welcome');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.water_drop_rounded, size: 80, color: Color(0xFFE53935)),
+            SizedBox(height: 16),
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE53935)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -31,14 +31,13 @@ class ProfileService {
     required String uid,
     String? fullName, // Made optional since identity verification extracts this
     required String phoneNumber,
-    required String bloodType,
     String? province,
     String? municipality,
     String? barangay,
   }) async {
     final Map<String, dynamic> data = {
       'phoneNumber': phoneNumber,
-      'bloodType': bloodType,
+      'profileCompleted': true,
       'updatedAt': FieldValue.serverTimestamp(),
     };
 

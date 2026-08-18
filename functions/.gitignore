@@ -1,0 +1,5 @@
+# Ignore local npm artifacts
+node_modules/
+*.local
+firebase-debug.log
+firebase-debug.*.log

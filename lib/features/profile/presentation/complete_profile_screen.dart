@@ -20,19 +20,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _municipalityController = TextEditingController();
   final _barangayController = TextEditingController();
 
-  String? _selectedBloodType;
   bool _isLoading = false;
-
-  final List<String> _bloodTypes = [
-    'A+',
-    'A-',
-    'B+',
-    'B-',
-    'AB+',
-    'AB-',
-    'O+',
-    'O-',
-  ];
 
   @override
   void initState() {
@@ -70,7 +58,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       await _profileService.updateProfile(
         uid: user.uid,
         phoneNumber: _phoneController.text.trim(),
-        bloodType: _selectedBloodType!,
         province: _provinceController.text.trim().isEmpty
             ? null
             : _provinceController.text.trim(),
@@ -107,44 +94,46 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Header Block
-                Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryRed.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.water_drop_rounded,
-                          size: 48,
-                          color: AppColors.primaryRed,
-                        ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryRed.withOpacity(0.1),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Complete Your Profile',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
+                      child: const Icon(
+                        Icons.person_pin_rounded,
+                        size: 48,
+                        color: AppColors.primaryRed,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Your official identity (Name, DOB, Gender) will be verified from your ID in the next step.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.black.withOpacity(0.6),
-                        ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Complete Your Profile',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Your official identity (Name, DOB, Gender) will be verified from your ID in the next step.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 32),
 
@@ -152,70 +141,78 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 const _SectionTitle('Contact Details'),
                 const SizedBox(height: 12),
 
-                const _FieldLabel('Phone Number *'),
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: _inputDecoration('e.g. 09123456789'),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Phone Number is required';
-                    }
-                    if (v.trim().length < 10) {
-                      return 'Enter a valid phone number';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 28),
-
-                // Medical Information Section
-                const _SectionTitle('Medical Details'),
-                const SizedBox(height: 12),
-
-                const _FieldLabel('Blood Type *'),
-                DropdownButtonFormField<String>(
-                  value: _selectedBloodType,
-                  decoration: _inputDecoration('Select Blood Type'),
-                  items: _bloodTypes
-                      .map((bt) => DropdownMenuItem(value: bt, child: Text(bt)))
-                      .toList(),
-                  onChanged: (val) => setState(() => _selectedBloodType = val),
-                  validator: (v) => v == null ? 'Blood Type is required' : null,
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const _FieldLabel('Phone Number *'),
+                    TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: _inputDecoration('e.g. 09123456789'),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Phone Number is required';
+                        }
+                        if (v.trim().length < 10) {
+                          return 'Enter a valid phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 28),
 
                 // Address Section
-                const _SectionTitle('Address'),
+                const _SectionTitle('Address Details'),
                 const SizedBox(height: 12),
 
-                const _FieldLabel('Province *'),
-                TextFormField(
-                  controller: _provinceController,
-                  decoration: _inputDecoration('e.g. Sorsogon'),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Province is required'
-                      : null,
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const _FieldLabel('Province *'),
+                    TextFormField(
+                      controller: _provinceController,
+                      decoration: _inputDecoration('e.g. Sorsogon'),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Province is required'
+                          : null,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
-                const _FieldLabel('Municipality / City *'),
-                TextFormField(
-                  controller: _municipalityController,
-                  decoration: _inputDecoration('e.g. Gubat'),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Municipality is required'
-                      : null,
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const _FieldLabel('Municipality / City *'),
+                    TextFormField(
+                      controller: _municipalityController,
+                      decoration: _inputDecoration('e.g. Gubat'),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Municipality is required'
+                          : null,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
-                const _FieldLabel('Barangay *'),
-                TextFormField(
-                  controller: _barangayController,
-                  decoration: _inputDecoration('e.g. Manook'),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Barangay is required'
-                      : null,
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const _FieldLabel('Barangay *'),
+                    TextFormField(
+                      controller: _barangayController,
+                      decoration: _inputDecoration('e.g. Manook'),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Barangay is required'
+                          : null,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 36),
 
@@ -275,7 +272,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppColors.primaryRed, width: 1.5),
+        borderSide: const BorderSide(color: AppColors.primaryRed, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -293,6 +290,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
+      textAlign: TextAlign.center,
       style: const TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w700,
@@ -312,6 +310,7 @@ class _FieldLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
+        textAlign: TextAlign.center,
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,

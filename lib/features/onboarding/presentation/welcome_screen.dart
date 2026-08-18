@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../auth/presentation/login_signup_screen.dart';
+import '../../auth/presentation/login_screen.dart';
+import '../../auth/presentation/register_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -12,6 +14,7 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  Timer? _timer;
 
   final List<_OnboardingItem> _slides = const [
     _OnboardingItem(
@@ -41,29 +44,48 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _startAutoScroll();
+  }
+
+  void _startAutoScroll() {
+    // Automatically transition to the next page every 3 seconds
+    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (_pageController.hasClients) {
+        int nextPage = _currentPage + 1;
+
+        // Loop back to the first page when reaching the end
+        if (nextPage >= _slides.length) {
+          nextPage = 0;
+        }
+
+        _pageController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _timer?.cancel(); // Cancel timer to prevent memory leaks
     _pageController.dispose();
     super.dispose();
   }
 
-  void _onNext() {
-    if (_currentPage < _slides.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _navigateToLogin();
-    }
+  void _navigateToLogin() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
-  void _navigateToLogin() {
-    // Use push (not pushReplacement) so AuthGate stays under the stack.
-    // After Google/email sign-in, popping back lets AuthGate/ProfileGate
-    // route to Complete Profile and Verification.
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LoginSignupScreen()),
-    );
+  void _navigateToRegister() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RegisterScreen()));
   }
 
   @override
@@ -73,32 +95,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Top Bar with Skip Button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: _currentPage == _slides.length - 1 ? 0.0 : 1.0,
-                  child: TextButton(
-                    onPressed: _currentPage == _slides.length - 1
-                        ? null
-                        : _navigateToLogin,
-                    child: Text(
-                      'Skip',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black.withOpacity(0.5),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // PageView Carousel
+            // Onboarding Content Carousel
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
@@ -113,8 +110,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     child: Column(
                       children: [
                         const Spacer(flex: 2),
-
-                        // Icon Graphic
                         Container(
                           width: 104,
                           height: 104,
@@ -129,8 +124,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
-
-                        // Title
                         Text(
                           slide.title,
                           textAlign: TextAlign.center,
@@ -141,8 +134,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-
-                        // Description
                         Text(
                           slide.description,
                           textAlign: TextAlign.center,
@@ -160,12 +151,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ),
             ),
 
-            // Bottom Navigation Controls
+            // Indicator Dots & Bottom Action Buttons
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 children: [
-                  // Page Indicators (Dots)
+                  // Page Indicators
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
@@ -184,14 +175,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 36),
 
-                  // Action Button
+                  // Main Full-Width Action Button (Sign up)
                   SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: _onNext,
+                      onPressed: _navigateToRegister,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryRed,
                         foregroundColor: Colors.white,
@@ -200,18 +191,42 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        _currentPage == _slides.length - 1
-                            ? 'Get started'
-                            : 'Next',
-                        style: const TextStyle(
+                      child: const Text(
+                        'Sign up',
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
+
+                  // Secondary Inline Link (Already a Member? Login here.)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Already a Member? ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.black.withOpacity(0.6),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _navigateToLogin,
+                        child: const Text(
+                          'Login here.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryRed,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
                 ],
               ),
             ),

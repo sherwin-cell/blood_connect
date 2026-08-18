@@ -10,19 +10,31 @@ import '../../verification/presentation/screens/verification_pending_screen.dart
 
 class ProfileGate extends StatelessWidget {
   final User user;
+  final FirestoreService _firestoreService;
 
-  const ProfileGate({super.key, required this.user});
+  ProfileGate({
+    super.key,
+    required this.user,
+    FirestoreService? firestoreService,
+  }) : _firestoreService = firestoreService ?? FirestoreService();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<UserProfile?>(
-      stream: FirestoreService().getUserProfileStream(user.uid),
+      stream: _firestoreService.getUserProfileStream(user.uid),
       builder: (context, profileSnapshot) {
+        // 1. Loading State
         if (profileSnapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(
+          return const Scaffold(
             backgroundColor: AppColors.background,
             body: Center(
-              child: CircularProgressIndicator(color: AppColors.primaryRed),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: AppColors.primaryRed),
+                ],
+              ),
             ),
           );
         }
@@ -35,14 +47,11 @@ class ProfileGate extends StatelessWidget {
 
         final profile = profileSnapshot.data;
 
-        // Prefer explicit flag written by ProfileService; fall back to required fields
-        // so older docs without the flag still route correctly.
+        // 2. Profile Data Completeness Check
+        // Profile is considered complete if profileCompleted flag is true OR phone number is provided
         final isProfileComplete =
             profile != null &&
-            (profile.profileCompleted ||
-                (profile.fullName.trim().isNotEmpty &&
-                    profile.bloodType.trim().isNotEmpty &&
-                    profile.phoneNumber.trim().isNotEmpty));
+            (profile.profileCompleted || profile.phoneNumber.trim().isNotEmpty);
 
         if (!isProfileComplete) {
           return const CompleteProfileScreen(
@@ -50,7 +59,8 @@ class ProfileGate extends StatelessWidget {
           );
         }
 
-        final status = (profile.verificationStatus).toLowerCase().trim();
+        // 3. Identity Verification Routing
+        final status = profile.verificationStatus.toLowerCase().trim();
 
         switch (status) {
           case 'approved':

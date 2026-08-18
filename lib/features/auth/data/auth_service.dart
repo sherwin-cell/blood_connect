@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../core/services/firestore_service.dart';
@@ -6,15 +6,14 @@ import '../../../core/services/firestore_service.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
-  // 1. GoogleSignIn instance (Singleton pattern in v7.x)
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   bool _isInitialized = false;
 
   static const String _serverClientId =
       '394558242984-d2unmof80o47siujfrkimcu6ljrlin5k.apps.googleusercontent.com';
 
-  /// Ensures google_sign_in 7.x is properly initialized before any calls
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
       await _googleSignIn.initialize(serverClientId: _serverClientId);
@@ -22,123 +21,179 @@ class AuthService {
     }
   }
 
-  // --- Email/password ---
+  // --- Email/Password Auth (register = create, login = authenticate only) ---
 
+  /// Creates a Firebase Auth account. Call ONLY from the Register flow.
   Future<UserCredential> register({
     required String email,
     required String password,
   }) async {
     return await _auth.createUserWithEmailAndPassword(
-      email: email,
+      email: email.trim(),
       password: password,
     );
   }
 
+  /// Authenticates an existing Firebase Auth account. Never creates a user.
   Future<UserCredential> login({
     required String email,
     required String password,
   }) async {
     return await _auth.signInWithEmailAndPassword(
-      email: email,
+      email: email.trim(),
       password: password,
     );
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  Future<void> sendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user != null && !user.emailVerified) {
+      await user.sendEmailVerification();
+    }
+  }
+
+  Future<bool> checkEmailVerified() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      await user.reload();
+      return _auth.currentUser?.emailVerified ?? false;
+    }
+    return false;
+  }
+
   Future<void> logout() async {
     await _ensureInitialized();
-    // Clears local session so the next sign-in prompts the account picker
     await _googleSignIn.signOut();
     await _auth.signOut();
   }
 
-  // --- Passwordless (magic link) sign-in ---
+  // --- Google Sign-In (LOGIN ONLY — never registers) ---
 
-  static const String _magicLinkUrl =
-      'https://blood-connect-12ac2.firebaseapp.com/finishSignIn';
-
-  ActionCodeSettings get _actionCodeSettings => ActionCodeSettings(
-    url: _magicLinkUrl,
-    handleCodeInApp: true,
-    androidPackageName: 'com.example.blood_connect',
-    androidInstallApp: true,
-    androidMinimumVersion: '1',
-    iOSBundleId: 'com.example.bloodConnect',
-  );
-
-  Future<void> sendPasswordlessLink(String email) async {
-    await _auth.sendSignInLinkToEmail(
-      email: email,
-      actionCodeSettings: _actionCodeSettings,
-    );
-  }
-
-  bool isSignInWithEmailLink(String link) {
-    return _auth.isSignInWithEmailLink(link);
-  }
-
-  Future<UserCredential> signInWithEmailLink({
-    required String email,
-    required String emailLink,
-  }) async {
-    return await _auth.signInWithEmailLink(email: email, emailLink: emailLink);
-  }
-
-  // --- Google sign-in ---
-
-  Future<UserCredential?> signInWithGoogle() async {
+  /// Login-only Google authentication.
+  ///
+  /// Does NOT call [signInWithCredential] (which auto-creates Auth users).
+  /// Instead:
+  /// 1. Google Sign-In locally (no Firebase Auth user created)
+  /// 2. Callable [googleLoginOnly] verifies the Google ID token with Admin SDK
+  /// 3. If an existing Firebase Auth user with Google provider exists → custom token
+  /// 4. If not → reject; no Auth user and no Firestore profile are created
+  /// 5. Client signs in with [signInWithCustomToken] only
+  ///
+  /// Deploy `/functions` (googleLoginOnly + blockGoogleAutoRegistration).
+  Future<UserCredential?> signInWithGoogleForLogin() async {
     await _ensureInitialized();
 
-    // Force clear any active/cached session so the OS account selection prompt always appears
     try {
       await _googleSignIn.signOut();
     } catch (_) {
-      // Ignore if no user was signed in previously
+      // Ignore if no prior Google session
     }
 
-    // Displays native bottom sheet with saved accounts (Account A, Account B, Add Account)
     final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
-
     final googleAuth = googleUser.authentication;
+    final idToken = googleAuth.idToken;
 
-    final credential = GoogleAuthProvider.credential(
-      idToken: googleAuth.idToken,
-    );
+    if (idToken == null || idToken.isEmpty) {
+      await _googleSignIn.signOut();
+      throw FirebaseAuthException(
+        code: 'invalid-credential',
+        message: 'Authentication failed. Please try again.',
+      );
+    }
 
-    final userCredential = await _auth.signInWithCredential(credential);
-    final user = userCredential.user;
+    try {
+      final callable = _functions.httpsCallable('googleLoginOnly');
+      final result = await callable.call(<String, dynamic>{
+        'idToken': idToken,
+      });
 
-    if (user != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final data = result.data;
+      final customToken = data is Map ? data['customToken'] as String? : null;
 
-      if (!userDoc.exists) {
-        await _firestoreService.createUserProfile(
-          uid: user.uid,
-          fullname: user.displayName ?? 'New User',
-          email: user.email ?? '',
+      if (customToken == null || customToken.isEmpty) {
+        await _googleSignIn.signOut();
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: 'Account not found. Please register first.',
         );
       }
-    }
 
-    return userCredential;
+      final userCredential = await _auth.signInWithCustomToken(customToken);
+      final user = userCredential.user;
+
+      if (user == null) {
+        await _googleSignIn.signOut();
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: 'Account not found. Please register first.',
+        );
+      }
+
+      // Blood-Connect profile must already exist for this UID
+      final profile = await _firestoreService.getUserProfile(user.uid);
+      if (profile == null) {
+        await _auth.signOut();
+        await _googleSignIn.signOut();
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: 'Account not found. Please register first.',
+        );
+      }
+
+      return userCredential;
+    } on FirebaseFunctionsException catch (e) {
+      await _googleSignIn.signOut();
+      if (e.code == 'not-found' || e.code == 'failed-precondition') {
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: 'Account not found. Please register first.',
+        );
+      }
+      if (e.code == 'permission-denied') {
+        throw FirebaseAuthException(
+          code: 'user-disabled',
+          message: 'This account has been disabled. Contact support for help.',
+        );
+      }
+      if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+        throw FirebaseAuthException(
+          code: 'network-request-failed',
+          message: 'Network error. Check your connection and try again.',
+        );
+      }
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Account not found. Please register first.',
+      );
+    } on FirebaseAuthException {
+      await _googleSignIn.signOut();
+      rethrow;
+    } catch (_) {
+      await _googleSignIn.signOut();
+      throw FirebaseAuthException(
+        code: 'network-request-failed',
+        message: 'Network error. Check your connection and try again.',
+      );
+    }
   }
 
-  // --- Shared error-message mapping ---
+  // --- Shared Error Message Mapping ---
 
   static String getErrorMessage(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':
-        return 'That email address doesn\'t look right. Please check and try again.';
+        return 'Please enter a valid email address.';
       case 'user-not-found':
-        return 'No account found with that email. Would you like to register instead?';
+        return 'Account not found. Please register first.';
       case 'wrong-password':
-        return 'Incorrect password. Please try again.';
       case 'invalid-credential':
-        return 'Email or password is incorrect. Please check and try again.';
+        return 'Invalid email or password.';
       case 'email-already-in-use':
-        return 'An account already exists with that email. Try logging in instead.';
+        return 'This email is already registered. Please log in.';
       case 'weak-password':
         return 'That password is too weak. Please choose a stronger one.';
       case 'user-disabled':
@@ -147,12 +202,14 @@ class AuthService {
         return 'Too many attempts. Please wait a moment and try again.';
       case 'network-request-failed':
         return 'Network error. Check your connection and try again.';
-      case 'expired-action-code':
-        return 'This sign-in link has expired. Please request a new one.';
-      case 'invalid-action-code':
-        return 'This sign-in link is invalid or has already been used.';
+      case 'account-exists-with-different-credential':
+        return 'Account not found. Please register first.';
       default:
-        return e.message ?? 'Authentication failed. Please try again.';
+        if (e.message != null &&
+            e.message!.toLowerCase().contains('account not found')) {
+          return 'Account not found. Please register first.';
+        }
+        return 'Authentication failed. Please try again.';
     }
   }
 }
