@@ -21,6 +21,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   int _selectedIndex = 0;
+  bool _isBannerMinimized = false;
 
   Future<void> _signOut() async {
     try {
@@ -48,51 +49,13 @@ class _HomeDashboardState extends State<HomeDashboard> {
         MaterialPageRoute(builder: (_) => const VerificationPendingScreen()),
       );
     } else {
-      _showVerificationPromptDialog(context);
+      // Direct navigation without showing a double popup
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const IdentityVerificationInfoScreen(),
+        ),
+      );
     }
-  }
-
-  void _showVerificationPromptDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.shield_outlined, color: AppColors.primaryRed),
-            SizedBox(width: 8),
-            Text('Verification Required', style: TextStyle(fontSize: 18)),
-          ],
-        ),
-        content: const Text(
-          'You must complete identity verification before you can post blood requests, apply as a donor, or access matching features.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const IdentityVerificationInfoScreen(),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryRed,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Verify Now'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -115,6 +78,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
 
         final profile = snapshot.data;
+        final bool isVerified = profile?.isVerified ?? false;
 
         return Scaffold(
           backgroundColor: const Color(0xFFF9F9F9),
@@ -150,13 +114,24 @@ class _HomeDashboardState extends State<HomeDashboard> {
               const SizedBox(width: 8),
             ],
           ),
-          body: IndexedStack(
-            index: _selectedIndex,
+          body: Stack(
             children: [
-              _buildHomeTab(profile),
-              _buildActivityTab(),
-              _buildNotificationTab(),
-              _buildHistoryTab(profile),
+              IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _buildHomeTab(profile),
+                  _buildActivityTab(),
+                  _buildNotificationTab(),
+                  _buildHistoryTab(profile),
+                ],
+              ),
+              if (!isVerified)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  child: _buildVerificationBanner(context),
+                ),
             ],
           ),
           bottomNavigationBar: BottomNavigationBar(
@@ -197,9 +172,144 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
+  Widget _buildVerificationBanner(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: AnimatedCrossFade(
+        duration: const Duration(milliseconds: 200),
+        crossFadeState: _isBannerMinimized
+            ? CrossFadeState.showSecond
+            : CrossFadeState.showFirst,
+        firstChild: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Verify Account',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isBannerMinimized = true;
+                    });
+                  },
+                  child: const Text(
+                    'Minimize',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Get full access to all Blood-Connect services, get verified now!',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const IdentityVerificationInfoScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1565C0),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Verify Now', style: TextStyle(fontSize: 12)),
+                      SizedBox(width: 4),
+                      Icon(Icons.chevron_right, size: 16),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        secondChild: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.shield_outlined, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Verify Account for full access',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isBannerMinimized = false;
+                });
+              },
+              child: const Text(
+                'Expand',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildHomeTab(UserProfile? profile) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8.0),
+      padding: const EdgeInsets.only(
+        left: 18.0,
+        right: 18.0,
+        top: 8.0,
+        bottom: 100.0,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
