@@ -71,7 +71,9 @@ class UserProfile {
       photoUrl: json['photoUrl'] as String?,
       verificationStatus: json['verificationStatus'] as String? ?? 'unverified',
       adminNotes: json['adminNotes'] as String?,
-      profileCompleted: json['profileCompleted'] as bool? ?? false,
+      profileCompleted:
+          (json['profileCompleted'] ?? json['isProfileComplete']) as bool? ??
+          false,
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),
     );

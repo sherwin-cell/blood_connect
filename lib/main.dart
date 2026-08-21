@@ -7,7 +7,8 @@ import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/presentation/register_screen.dart';
 import 'features/auth/presentation/forgot_password_screen.dart';
 import 'features/auth/presentation/email_verification_screen.dart';
-import 'features/onboarding/presentation/welcome_screen.dart'; // Ensure path is correct
+import 'features/onboarding/presentation/welcome_screen.dart';
+import 'features/splash/presentation/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +25,8 @@ class BloodConnectApp extends StatelessWidget {
       title: 'Blood-Connect',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Roboto'),
-      home: const SplashScreen(),
+      // Cold-start splash, then AuthGate owns session routing.
+      home: const _AppStartupSplash(),
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/auth-gate': (context) => const AuthGate(),
@@ -37,45 +39,33 @@ class BloodConnectApp extends StatelessWidget {
   }
 }
 
-/// Initial Splash Screen component
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+/// Brief branded splash on cold start, then [AuthGate].
+/// Login/Register pop to the first route after this replacement, so AuthGate
+/// remains the authenticated root (no stack under Dashboard).
+class _AppStartupSplash extends StatefulWidget {
+  const _AppStartupSplash();
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  State<_AppStartupSplash> createState() => _AppStartupSplashState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _AppStartupSplashState extends State<_AppStartupSplash> {
   @override
   void initState() {
     super.initState();
-    _navigateToNext();
+    _navigateToAuthGate();
   }
 
-  Future<void> _navigateToNext() async {
-    // Simulated splash delay (2 seconds)
+  Future<void> _navigateToAuthGate() async {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
-
-    // Navigates directly to the WelcomeScreen first
-    Navigator.of(context).pushReplacementNamed('/welcome');
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const AuthGate()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.water_drop_rounded, size: 80, color: Color(0xFFE53935)),
-            SizedBox(height: 16),
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE53935)),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const SplashScreen();
   }
 }

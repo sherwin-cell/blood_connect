@@ -1,16 +1,17 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
 import '../../../core/services/firestore_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   bool _isInitialized = false;
 
+  /// Web client ID used as [serverClientId] so Google returns an ID token
+  /// suitable for Firebase Auth.
   static const String _serverClientId =
       '394558242984-d2unmof80o47siujfrkimcu6ljrlin5k.apps.googleusercontent.com';
 
@@ -21,7 +22,7 @@ class AuthService {
     }
   }
 
-  // --- Email/Password Auth (register = create, login = authenticate only) ---
+  // --- Email/Password Auth ---
 
   /// Creates a Firebase Auth account. Call ONLY from the Register flow.
   Future<UserCredential> register({
@@ -67,116 +68,79 @@ class AuthService {
 
   Future<void> logout() async {
     await _ensureInitialized();
-    await _googleSignIn.signOut();
-    await _auth.signOut();
-  }
-
-  // --- Google Sign-In (LOGIN ONLY — never registers) ---
-
-  /// Login-only Google authentication.
-  ///
-  /// Does NOT call [signInWithCredential] (which auto-creates Auth users).
-  /// Instead:
-  /// 1. Google Sign-In locally (no Firebase Auth user created)
-  /// 2. Callable [googleLoginOnly] verifies the Google ID token with Admin SDK
-  /// 3. If an existing Firebase Auth user with Google provider exists → custom token
-  /// 4. If not → reject; no Auth user and no Firestore profile are created
-  /// 5. Client signs in with [signInWithCustomToken] only
-  ///
-  /// Deploy `/functions` (googleLoginOnly + blockGoogleAutoRegistration).
-  Future<UserCredential?> signInWithGoogleForLogin() async {
-    await _ensureInitialized();
-
     try {
       await _googleSignIn.signOut();
     } catch (_) {
-      // Ignore if no prior Google session
+      // Ignore if Google session was never established
     }
+    await _auth.signOut();
+  }
 
-    final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
-    final googleAuth = googleUser.authentication;
-    final idToken = googleAuth.idToken;
+  // --- Google Sign-In (standard Firebase credential flow) ---
 
-    if (idToken == null || idToken.isEmpty) {
-      await _googleSignIn.signOut();
-      throw FirebaseAuthException(
-        code: 'invalid-credential',
-        message: 'Authentication failed. Please try again.',
-      );
-    }
+  /// Signs in with Google via Firebase Auth.
+  ///
+  /// Firebase creates the Auth user on first Google sign-in and reuses it
+  /// on subsequent sign-ins. A Firestore profile stub is created only when
+  /// missing so ProfileGate can route to Complete Profile.
+  ///
+  /// Returns `null` when the user cancels the Google picker.
+  Future<UserCredential?> signInWithGoogle() async {
+    await _ensureInitialized();
 
     try {
-      final callable = _functions.httpsCallable('googleLoginOnly');
-      final result = await callable.call(<String, dynamic>{
-        'idToken': idToken,
-      });
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {
+        // Ignore if no prior Google session
+      }
 
-      final data = result.data;
-      final customToken = data is Map ? data['customToken'] as String? : null;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+      final String? idToken = googleUser.authentication.idToken;
 
-      if (customToken == null || customToken.isEmpty) {
+      if (idToken == null || idToken.isEmpty) {
         await _googleSignIn.signOut();
         throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'Account not found. Please register first.',
+          code: 'invalid-credential',
+          message: 'Authentication failed. Please try again.',
         );
       }
 
-      final userCredential = await _auth.signInWithCustomToken(customToken);
+      String? accessToken;
+      try {
+        final authorization = await googleUser.authorizationClient
+            .authorizationForScopes(const <String>['email', 'profile']);
+        accessToken = authorization?.accessToken;
+      } catch (_) {
+        // ID token alone is sufficient for Firebase Auth
+      }
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user;
 
-      if (user == null) {
-        await _googleSignIn.signOut();
-        throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'Account not found. Please register first.',
-        );
-      }
-
-      // Blood-Connect profile must already exist for this UID
-      final profile = await _firestoreService.getUserProfile(user.uid);
-      if (profile == null) {
-        await _auth.signOut();
-        await _googleSignIn.signOut();
-        throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'Account not found. Please register first.',
+      if (user != null) {
+        await _firestoreService.createUserProfile(
+          uid: user.uid,
+          fullname: user.displayName,
+          email: user.email ?? googleUser.email,
         );
       }
 
       return userCredential;
-    } on FirebaseFunctionsException catch (e) {
-      await _googleSignIn.signOut();
-      if (e.code == 'not-found' || e.code == 'failed-precondition') {
-        throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'Account not found. Please register first.',
-        );
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted ||
+          e.code == GoogleSignInExceptionCode.uiUnavailable) {
+        return null;
       }
-      if (e.code == 'permission-denied') {
-        throw FirebaseAuthException(
-          code: 'user-disabled',
-          message: 'This account has been disabled. Contact support for help.',
-        );
-      }
-      if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
-        throw FirebaseAuthException(
-          code: 'network-request-failed',
-          message: 'Network error. Check your connection and try again.',
-        );
-      }
-      throw FirebaseAuthException(
-        code: 'user-not-found',
-        message: 'Account not found. Please register first.',
-      );
-    } on FirebaseAuthException {
-      await _googleSignIn.signOut();
-      rethrow;
-    } catch (_) {
-      await _googleSignIn.signOut();
       throw FirebaseAuthException(
         code: 'network-request-failed',
-        message: 'Network error. Check your connection and try again.',
+        message: 'Google Sign-In failed. Please try again.',
       );
     }
   }
@@ -188,7 +152,7 @@ class AuthService {
       case 'invalid-email':
         return 'Please enter a valid email address.';
       case 'user-not-found':
-        return 'Account not found. Please register first.';
+        return 'No user found with this email.';
       case 'wrong-password':
       case 'invalid-credential':
         return 'Invalid email or password.';
@@ -203,13 +167,9 @@ class AuthService {
       case 'network-request-failed':
         return 'Network error. Check your connection and try again.';
       case 'account-exists-with-different-credential':
-        return 'Account not found. Please register first.';
+        return 'An account already exists with a different sign-in method.';
       default:
-        if (e.message != null &&
-            e.message!.toLowerCase().contains('account not found')) {
-          return 'Account not found. Please register first.';
-        }
-        return 'Authentication failed. Please try again.';
+        return e.message ?? 'Authentication failed. Please try again.';
     }
   }
 }

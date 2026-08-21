@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../data/auth_service.dart';
 
@@ -14,18 +15,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
 
-  final _identifierController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   bool _isSubmitting = false;
-  bool _isMobileLogin = false;
+  bool _obscurePassword = true;
 
-  final RegExp _emailRegex = RegExp(
-    r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
-  );
+  // Updated flexible Email Regex
+  final RegExp _emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -34,20 +36,20 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  // ============================================================
+  // EMAIL + PASSWORD LOGIN
+  // ============================================================
+
   Future<void> _onLoginPressed() async {
     if (!_formKey.currentState!.validate() || _isSubmitting) return;
 
     setState(() => _isSubmitting = true);
 
     try {
-      final identifier = _identifierController.text.trim();
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
 
-      if (_isMobileLogin) {
-        final fullPhoneNumber = '+63$identifier';
-        await _authService.login(email: fullPhoneNumber, password: '');
-      } else {
-        await _authService.login(email: identifier, password: '');
-      }
+      await _authService.login(email: email, password: password);
 
       _returnToAuthGate();
     } on FirebaseAuthException catch (e) {
@@ -57,7 +59,41 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       _showSnackBar('Something went wrong. Please try again.');
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  // ============================================================
+  // GOOGLE LOGIN
+  // ============================================================
+
+  Future<void> _onGoogleSignInPressed() async {
+    if (_isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final userCredential = await _authService.signInWithGoogle();
+
+      if (userCredential == null || userCredential.user == null) {
+        if (!mounted) return;
+        _showSnackBar('Google Sign-In was cancelled.');
+        return;
+      }
+
+      _returnToAuthGate();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(AuthService.getErrorMessage(e));
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Google Sign-In failed. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -68,14 +104,6 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: isError ? null : Colors.green.shade700,
       ),
     );
-  }
-
-  void _toggleLoginMethod() {
-    setState(() {
-      _isMobileLogin = !_isMobileLogin;
-      _identifierController.clear();
-      _formKey.currentState?.reset();
-    });
   }
 
   @override
@@ -98,239 +126,269 @@ class _LoginScreenState extends State<LoginScreen> {
             : null,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Spacer(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 4),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Spacer(),
 
-                // Main Title Header
-                const Text(
-                  'Hello, Welcome!',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-
-                // Subtitle Branding
-                RichText(
-                  text: const TextSpan(
-                    style: TextStyle(fontSize: 14, color: Colors.black54),
-                    children: [
-                      TextSpan(text: 'Login to '),
-                      TextSpan(
-                        text: 'Blood',
-                        style: TextStyle(
-                          color: AppColors.primaryRed,
-                          fontWeight: FontWeight.bold,
+                        const Text(
+                          'Hello, Welcome!',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      TextSpan(
-                        text: 'Connect',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 28),
+                        const SizedBox(height: 4),
 
-                // Dynamic Input Field (Email or Mobile Number)
-                if (_isMobileLogin)
-                  TextFormField(
-                    controller: _identifierController,
-                    keyboardType: TextInputType.phone,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _onLoginPressed(),
-                    style: const TextStyle(fontSize: 14, color: Colors.black87),
-                    decoration: _inputDecoration('Mobile Number').copyWith(
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 14, right: 8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('🇵🇭', style: TextStyle(fontSize: 16)),
-                            const SizedBox(width: 6),
-                            Text(
-                              '+63',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade800,
-                                fontWeight: FontWeight.w500,
+                        RichText(
+                          text: const TextSpan(
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black54,
+                            ),
+                            children: [
+                              TextSpan(text: 'Login to '),
+                              TextSpan(
+                                text: 'Blood',
+                                style: TextStyle(
+                                  color: AppColors.primaryRed,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'Connect',
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          decoration: _inputDecoration('Email Address'),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Email address is required';
+                            }
+                            if (!_emailRegex.hasMatch(value.trim())) {
+                              return 'Enter a valid email address';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _onLoginPressed(),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          decoration: _inputDecoration(
+                            'Password',
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: Colors.grey.shade600,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Password is required';
+                            }
+                            if (value.length < 6) {
+                              return 'Password must be at least 6 characters';
+                            }
+                            return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 40),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: ElevatedButton(
+                            onPressed: _isSubmitting ? null : _onLoginPressed,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryRed,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Login',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: OutlinedButton(
+                            onPressed: _isSubmitting
+                                ? null
+                                : _onGoogleSignInPressed,
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: Colors.grey.shade300),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              height: 18,
-                              width: 1,
-                              color: Colors.grey.shade300,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/images/google_logo.png',
+                                  height: 18,
+                                  width: 18,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.g_mobiledata,
+                                        size: 24,
+                                        color: Colors.black87,
+                                      ),
+                                ),
+                                const SizedBox(width: 10),
+                                const Text(
+                                  'Continue with Google',
+                                  style: TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Divider(color: Colors.grey.shade300),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              child: Text(
+                                'or',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Divider(color: Colors.grey.shade300),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Mobile number is required';
-                      }
-                      if (value.trim().length < 10) {
-                        return 'Enter a valid mobile number';
-                      }
-                      return null;
-                    },
-                  )
-                else
-                  TextFormField(
-                    controller: _identifierController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _onLoginPressed(),
-                    style: const TextStyle(fontSize: 14, color: Colors.black87),
-                    decoration: _inputDecoration('Email Address'),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Email address is required';
-                      }
-                      if (!_emailRegex.hasMatch(value.trim())) {
-                        return 'Enter a valid email address';
-                      }
-                      return null;
-                    },
-                  ),
-                const SizedBox(height: 12),
 
-                // Login Mode Switcher Button
-                Center(
-                  child: TextButton(
-                    onPressed: _toggleLoginMethod,
-                    child: Text(
-                      _isMobileLogin
-                          ? 'Login via Email'
-                          : 'Login via Mobile Number',
-                      style: const TextStyle(
-                        color: AppColors.primaryRed,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
+                        const SizedBox(height: 16),
 
-                const Spacer(),
-
-                // Primary Submit Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _onLoginPressed,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryRed,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.0,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Don't have an account yet?",
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
                               ),
                             ),
-                          )
-                        : const Text(
-                            'Login',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: _isSubmitting
+                                  ? null
+                                  : () {
+                                      Navigator.of(
+                                        context,
+                                      ).pushNamed('/register');
+                                    },
+                              child: const Text(
+                                'Create new account',
+                                style: TextStyle(
+                                  color: AppColors.primaryRed,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Divider with 'or'
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.grey.shade300)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text(
-                        'or',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 11,
+                          ],
                         ),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.grey.shade300)),
-                  ],
-                ),
-                const SizedBox(height: 12),
 
-                // Account Prompt Label
-                Center(
-                  child: Text(
-                    "Don't have Blood-Connect account yet?",
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Secondary Outlined Action Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: OutlinedButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () {
-                            Navigator.of(context).pushNamed('/register');
-                          },
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(
-                        color: AppColors.primaryRed,
-                        width: 1.2,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Create new account',
-                      style: TextStyle(
-                        color: AppColors.primaryRed,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                        const Spacer(),
+                      ],
                     ),
                   ),
                 ),
-                const Spacer(),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  InputDecoration _inputDecoration(String label) {
+  InputDecoration _inputDecoration(String label, {Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
+      suffixIcon: suffixIcon,
       labelStyle: TextStyle(color: Colors.grey.shade600, fontSize: 12),
       floatingLabelStyle: const TextStyle(
         color: AppColors.primaryRed,

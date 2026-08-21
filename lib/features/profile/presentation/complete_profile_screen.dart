@@ -69,7 +69,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             : _barangayController.text.trim(),
       );
 
-      // ProfileGate automatically routes user to Identity Verification
+      // ProfileGate observes profileCompleted and routes to Dashboard.
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to save profile: $e');

@@ -19,13 +19,11 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> {
   final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService =
-      AuthService(); // Integrated AuthService instance
+  final AuthService _authService = AuthService();
   int _selectedIndex = 0;
 
   Future<void> _signOut() async {
     try {
-      // Calls AuthService logout to clear GoogleSignIn + FirebaseAuth sessions
       await _authService.logout();
     } catch (e) {
       if (!mounted) return;
@@ -35,7 +33,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     }
   }
 
-  /// Verification Guard Handler
   void _handleProtectedFeature(
     BuildContext context,
     UserProfile? profile,
@@ -147,7 +144,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
                   size: 28,
                 ),
                 onPressed: () {
-                  // Index 3 matches the History/Profile tab where sign out resides
                   setState(() => _selectedIndex = 3);
                 },
               ),
@@ -200,8 +196,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
       },
     );
   }
-
-  // --- TAB BUILDERS ---
 
   Widget _buildHomeTab(UserProfile? profile) {
     return SingleChildScrollView(
@@ -258,8 +252,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  // --- DESIGN COMPONENTS ---
-
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
@@ -271,7 +263,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Top Red Banner
   Widget _buildMemberCard(UserProfile? profile) {
     final name = profile?.fullName ?? 'Ana Santos';
     final bool isVerified = profile?.isVerified ?? false;
@@ -397,7 +388,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Quick Access Cards
   Widget _buildQuickAccessGrid(UserProfile? profile) {
     return Row(
       children: [
@@ -534,7 +524,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Matching Center Cards
   Widget _buildMatchingCenterGrid(UserProfile? profile) {
     return Row(
       children: [
@@ -544,9 +533,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
             subtitle: 'View donors who are compatible with your blood request.',
             icon: Icons.people_outline,
             onTap: () {
-              _handleProtectedFeature(context, profile, () {
-                // Navigate to Matched Donors Screen
-              });
+              _handleProtectedFeature(context, profile, () {});
             },
           ),
         ),
@@ -557,9 +544,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
             subtitle: 'View blood requests that matched your blood type.',
             icon: Icons.bloodtype_outlined,
             onTap: () {
-              _handleProtectedFeature(context, profile, () {
-                // Navigate to Matched Requesters Screen
-              });
+              _handleProtectedFeature(context, profile, () {});
             },
           ),
         ),
@@ -618,7 +603,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// 4-Grid Information & Services Section
   Widget _buildInfoServicesGrid() {
     return Row(
       children: [

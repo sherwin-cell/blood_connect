@@ -28,7 +28,6 @@ class FirestoreService {
   }
 
   /// Looks up an existing Blood-Connect profile by email (case-insensitive).
-  /// Used by Google login-only to avoid calling Firebase Auth when unknown.
   Future<UserProfile?> findUserProfileByEmail(String email) async {
     final normalized = email.trim().toLowerCase();
     if (normalized.isEmpty) return null;
@@ -57,19 +56,32 @@ class FirestoreService {
     return UserProfile.fromFirestore(data);
   }
 
-  /// Creates initial user profile on registration only.
+  /// Creates initial user profile if missing.
+  /// Does not overwrite [profileCompleted] or other fields on repeat sign-ins.
   Future<void> createUserProfile({
     required String uid,
     String? fullname,
     required String email,
   }) async {
-    await _firestore.collection('users').doc(uid).set({
-      'uid': uid,
-      if (fullname != null) 'fullName': fullname,
+    final docRef = _firestore.collection('users').doc(uid);
+    final docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      await docRef.set({
+        'uid': uid,
+        if (fullname != null && fullname.isNotEmpty) 'fullName': fullname,
+        'email': email.trim().toLowerCase(),
+        'profileCompleted': false,
+        'verificationStatus': 'unverified',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    // Existing profile: only refresh identity basics — never reset completion.
+    await docRef.set({
       'email': email.trim().toLowerCase(),
-      'profileCompleted': false,
-      'verificationStatus': 'unverified',
-      'createdAt': FieldValue.serverTimestamp(),
+      if (fullname != null && fullname.isNotEmpty) 'fullName': fullname,
     }, SetOptions(merge: true));
   }
 
@@ -108,6 +120,7 @@ class FirestoreService {
 
   // ==========================================
   // IDENTITY VERIFICATION METHODS
+  // (Optional feature path — not part of auth routing)
   // ==========================================
 
   /// Saves the user's identity verification submission along with ARSA Face API

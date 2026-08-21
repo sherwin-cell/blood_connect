@@ -180,21 +180,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   // Main Full-Width Action Button (Sign up)
                   SizedBox(
                     width: double.infinity,
-                    height: 52,
+                    height: 44,
                     child: ElevatedButton(
                       onPressed: _navigateToRegister,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryRed,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         elevation: 0,
                       ),
                       child: const Text(
                         'Sign up',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -218,7 +218,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         child: const Text(
                           'Login here.',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: AppColors.primaryRed,
                           ),

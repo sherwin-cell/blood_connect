@@ -29,13 +29,14 @@ class ProfileService {
   /// Sets [profileCompleted] to `true` to instantly trigger reactive gate transitions.
   Future<void> updateProfile({
     required String uid,
-    String? fullName, // Made optional since identity verification extracts this
+    String? fullName,
     required String phoneNumber,
     String? province,
     String? municipality,
     String? barangay,
   }) async {
     final Map<String, dynamic> data = {
+      'uid': uid,
       'phoneNumber': phoneNumber,
       'profileCompleted': true,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -46,6 +47,10 @@ class ProfileService {
     if (municipality != null) data['municipality'] = municipality;
     if (barangay != null) data['barangay'] = barangay;
 
-    await _firestore.collection('users').doc(uid).update(data);
+    // Use set+merge so first-time Google users without a stub still succeed.
+    await _firestore.collection('users').doc(uid).set(
+      data,
+      SetOptions(merge: true),
+    );
   }
 }

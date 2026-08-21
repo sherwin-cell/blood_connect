@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../onboarding/presentation/welcome_screen.dart';
 import '../../profile/presentation/profile_gate.dart';
+import '../../splash/presentation/splash_screen.dart';
 import 'email_verification_screen.dart';
 
-/// Single source of truth for unauthenticated → verified → profile routing.
+/// Single source of truth for unauthenticated → email-verified → profile routing.
 /// Uses [userChanges] so email verification after [User.reload] is observed.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -16,9 +17,7 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const SplashScreen();
         }
 
         final user = snapshot.data;
