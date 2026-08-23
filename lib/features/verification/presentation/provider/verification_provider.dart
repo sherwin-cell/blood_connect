@@ -1,28 +1,98 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../data/services/arsa_face_service.dart';
 import '../../data/services/ocr_service.dart';
 import '../../domain/entities/verification_data.dart';
 import '../../domain/repositories/i_verification_repository.dart';
 
+enum VerificationStatus { none, pending, approved, rejected }
+
 class VerificationProvider extends ChangeNotifier {
   final IVerificationRepository repository;
-  final ArsaFaceService arsaFaceService;
-
-  VerificationProvider({
-    required this.repository,
-    required this.arsaFaceService,
-  });
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
 
   VerificationData _data = const VerificationData();
   bool _isLoading = false;
   String? _errorMessage;
 
+  VerificationStatus _status = VerificationStatus.none;
+  StreamSubscription<DocumentSnapshot>? _statusSubscription;
+  final StreamController<VerificationStatus> _statusStreamController =
+      StreamController<VerificationStatus>.broadcast();
+
+  VerificationProvider({
+    required this.repository,
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance {
+    _initStatusListener();
+  }
+
+  // Getters
   VerificationData get data => _data;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  VerificationStatus get status => _status;
+
+  /// Broadcast stream consumed by screens like [VerificationPendingScreen]
+  Stream<VerificationStatus> get statusStream => _statusStreamController.stream;
+
+  // ---------------------------------------------------------------------------
+  // Real-time Firestore Status Listener
+  // ---------------------------------------------------------------------------
+
+  /// Listens to real-time verification updates from the authenticated user's doc
+  void _initStatusListener() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    _statusSubscription?.cancel();
+    _statusSubscription = _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (snapshot.exists && snapshot.data() != null) {
+              final data = snapshot.data()!;
+              final statusStr = data['verificationStatus'] as String? ?? 'none';
+
+              _status = _parseStatus(statusStr);
+              _statusStreamController.add(_status);
+              notifyListeners();
+            }
+          },
+          onError: (error) {
+            _errorMessage = 'Failed to sync verification status: $error';
+            notifyListeners();
+          },
+        );
+  }
+
+  VerificationStatus _parseStatus(String rawStatus) {
+    switch (rawStatus.toLowerCase()) {
+      case 'pending':
+      case 'under_review':
+        return VerificationStatus.pending;
+      case 'approved':
+      case 'verified':
+        return VerificationStatus.approved;
+      case 'rejected':
+      case 'failed':
+        return VerificationStatus.rejected;
+      default:
+        return VerificationStatus.none;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ID & Selfie Operations
+  // ---------------------------------------------------------------------------
 
   void setIdType(String type) {
     _data = _data.copyWith(idType: type);
@@ -138,10 +208,7 @@ class VerificationProvider extends ChangeNotifier {
         return false;
       }
 
-      _data = _data.copyWith(
-        selfiePath: imageFile.path,
-        hasDetectedFace: true,
-      );
+      _data = _data.copyWith(selfiePath: imageFile.path, hasDetectedFace: true);
       _errorMessage = null;
       return true;
     } catch (e) {
@@ -152,10 +219,13 @@ class VerificationProvider extends ChangeNotifier {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Submission Pipeline (Local Embeddings Execution)
+  // ---------------------------------------------------------------------------
+
   /// Submits verification using a provided userId.
   ///
-  /// Flow: ARSA face compare → Cloudinary upload → Firestore save.
-  /// Does not upload/save if ARSA fails.
+  /// Flow: Local face crop → Local embedding compare → Score Check (>= 75% Auto-Approves) → Repository Save
   Future<bool> submit(String userId) async {
     _setLoading(true);
     try {
@@ -195,8 +265,7 @@ class VerificationProvider extends ChangeNotifier {
         return false;
       }
 
-      // Crop faces so ARSA receives clear face images (ID cards often fail
-      // with HTTP 400 "Could not detect faces in one or both images").
+      // Crop face bounding boxes for localized feature extraction
       final croppedId = await repository.cropPrimaryFace(idFile);
       final croppedSelfie = await repository.cropPrimaryFace(selfieFile);
 
@@ -212,35 +281,45 @@ class VerificationProvider extends ChangeNotifier {
         return false;
       }
 
-      final arsaResult = await arsaFaceService.compareFaces(
-        idImage: croppedId,
-        selfieImage: croppedSelfie,
+      // Perform local face feature vector comparison
+      final matchResult = await repository.compareFaces(
+        idCardFace: croppedId,
+        selfieFace: croppedSelfie,
       );
 
-      if (arsaResult['success'] != true) {
-        _errorMessage = _mapArsaError(arsaResult);
-        debugPrint('ARSA comparison failed: $_errorMessage');
+      if (matchResult['success'] != true) {
+        _errorMessage =
+            matchResult['error'] as String? ?? 'Face matching failed.';
+        debugPrint('Local face comparison failed: $_errorMessage');
         return false;
       }
 
-      final faceMatchScore = (arsaResult['faceMatchScore'] as num?)?.toDouble();
-      final faceMatchPassed = arsaResult['faceMatchPassed'] == true;
-      final raw = arsaResult['raw'];
+      final faceMatchScore = (matchResult['faceMatchConfidence'] as num?)
+          ?.toDouble();
+      final faceMatchPassed = matchResult['faceMatchPassed'] == true;
 
       final finalData = _data.copyWith(
         faceMatchConfidence: faceMatchScore,
         faceMatchPassed: faceMatchPassed,
-        verificationProvider: 'arsa',
-        arsaRawResponse: raw is Map<String, dynamic> ? raw : null,
+        verificationProvider: 'local_facenet',
       );
       _data = finalData;
 
+      // Determine status: If match passes (>= 75%), auto-approve. Otherwise, send to review.
+      final String determinedStatus = faceMatchPassed
+          ? 'approved'
+          : 'under_review';
+
       debugPrint(
-        'ARSA OK — score: $faceMatchScore, passed: $faceMatchPassed',
+        'Face Match Result — Score: ${faceMatchScore?.toStringAsFixed(1)}%, Passed: $faceMatchPassed, Status: $determinedStatus',
       );
 
       try {
-        await repository.submitVerification(userId: userId, data: finalData);
+        await repository.submitVerification(
+          userId: userId,
+          data: finalData,
+          status: determinedStatus,
+        );
       } catch (e) {
         final msg = e.toString().toLowerCase();
         if (msg.contains('cloudinary')) {
@@ -252,6 +331,8 @@ class VerificationProvider extends ChangeNotifier {
       }
 
       _errorMessage = null;
+      _status = _parseStatus(determinedStatus);
+      _statusStreamController.add(_status);
       return true;
     } catch (e, stackTrace) {
       debugPrint('Verification submit error: $e');
@@ -264,7 +345,7 @@ class VerificationProvider extends ChangeNotifier {
   }
 
   Future<bool> submitAllDetails() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser = _auth.currentUser;
     if (currentUser == null) {
       _errorMessage = 'User is not authenticated. Please log in again.';
       notifyListeners();
@@ -273,49 +354,19 @@ class VerificationProvider extends ChangeNotifier {
     return await submit(currentUser.uid);
   }
 
-  String _mapArsaError(Map<String, dynamic> arsaResult) {
-    final code = arsaResult['errorCode'] as String?;
-    final message = arsaResult['error'] as String?;
-
-    switch (code) {
-      case 'missing_id':
-        return 'Government ID image is missing.';
-      case 'missing_selfie':
-        return 'Selfie image is missing.';
-      case 'empty_id':
-        return 'Government ID image is empty.';
-      case 'empty_selfie':
-        return 'Selfie image is empty.';
-      case 'invalid_image':
-        return message ?? 'Invalid image file.';
-      case 'no_face':
-        return message ??
-            'Could not detect faces in one or both images. '
-                'Please recapture clearer photos.';
-      case 'multiple_faces':
-        return message ?? 'Multiple faces detected.';
-      case 'auth':
-        return 'Face verification authentication failed.';
-      case 'not_found':
-        return 'Face verification service endpoint not found.';
-      case 'rate_limit':
-        return 'Face verification rate limit exceeded. Try again later.';
-      case 'server':
-        return 'Face verification server error. Please try again.';
-      case 'timeout':
-        return 'Face verification timed out. Please try again.';
-      case 'network':
-        return 'Network error during face verification.';
-      case 'invalid_json':
-        return 'Invalid response from face verification service.';
-      default:
-        return message ??
-            'Face verification failed (HTTP ${arsaResult['httpStatus']}).';
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Helpers & Cleanup
+  // ---------------------------------------------------------------------------
 
   void _setLoading(bool val) {
     _isLoading = val;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _statusSubscription?.cancel();
+    _statusStreamController.close();
+    super.dispose();
   }
 }

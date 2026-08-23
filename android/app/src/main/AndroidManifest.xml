@@ -1,13 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 1. ADDED: Required for Firebase & deep link fetching -->
+    <!-- 1. Required for Firebase & API calls -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:label="blood_connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:largeHeap="true"> <!-- ✅ FIXED: Spelling + placed inside tag -->
+        android:largeHeap="true"
+        android:usesCleartextTraffic="true"> <!-- ✅ ADDED: Allows local HTTP requests to 10.0.2.2 -->
 
         <activity
             android:name=".MainActivity"
@@ -30,7 +31,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- 2. ADDED: Firebase Passwordless Auth Deep Link Filter -->
+            <!-- 2. Firebase Passwordless Auth Deep Link Filter -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 

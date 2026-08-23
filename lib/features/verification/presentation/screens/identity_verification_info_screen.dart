@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/theme/app_theme.dart'; // Adjust import path
+
 import '../../../../core/services/firestore_service.dart';
-import '../../data/repositories/verification_repository_impl.dart'; // adjust path to match your project
-import '../../data/services/ocr_service.dart';
-import '../../data/services/face_detector_service.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../data/repositories/verification_repository_impl.dart';
 import '../../data/services/cloudinary_service.dart';
-import '../../data/services/arsa_face_service.dart'; // 1. Added ARSA Service Import
+import '../../data/services/face_detector_service.dart';
+import '../../data/services/ocr_service.dart';
+import '../../data/services/tflite_face_embedding_service.dart';
 import '../provider/verification_provider.dart';
 import 'select_valid_id_screen.dart';
 
@@ -20,7 +21,6 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // Hide back when this screen is the ProfileGate root (required step).
         automaticallyImplyLeading: false,
         leading: Navigator.of(context).canPop()
             ? IconButton(
@@ -119,14 +119,11 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (_) => ChangeNotifierProvider(
                           create: (_) => VerificationProvider(
-                            // DEV ONLY: API key in the client for local testing.
-                            // Production must proxy ARSA via a backend/Cloud Function.
-                            arsaFaceService: ArsaFaceService(
-                              'eb3e143543cc1eee84640d94770a6e290bfc86bb5f65c5ef4099e76116013e90',
-                            ),
                             repository: VerificationRepositoryImpl(
                               ocrService: OcrService(),
                               faceDetectorService: FaceDetectorService(),
+                              faceEmbeddingService:
+                                  TFLiteFaceEmbeddingService(),
                               cloudinaryService: CloudinaryService(),
                               firestoreService: FirestoreService(),
                             ),

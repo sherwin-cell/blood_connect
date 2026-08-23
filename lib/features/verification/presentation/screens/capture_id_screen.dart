@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../provider/verification_provider.dart';
-import '../widgets/camera_overlay.dart';
+import '../widgets/id_camera_overlay.dart';
 import 'capture_back_id_screen.dart';
 
 class CaptureIdScreen extends StatefulWidget {

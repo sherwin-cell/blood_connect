@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class ApplyDonorScreen extends StatefulWidget {
   const ApplyDonorScreen({super.key});

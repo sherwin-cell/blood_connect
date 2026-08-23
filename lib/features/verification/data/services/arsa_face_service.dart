@@ -82,8 +82,7 @@ class ArsaFaceService {
         return {
           'success': false,
           'errorCode': 'invalid_image',
-          'error':
-              'Government ID must be a JPEG or PNG image. Got "$idExt".',
+          'error': 'Government ID must be a JPEG or PNG image. Got "$idExt".',
         };
       }
 
@@ -150,9 +149,9 @@ class ArsaFaceService {
     );
 
     try {
-      final streamedResponse = await request
-          .send()
-          .timeout(const Duration(seconds: 45));
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 45),
+      );
       final statusCode = streamedResponse.statusCode;
       final responseBody = await streamedResponse.stream.bytesToString();
 

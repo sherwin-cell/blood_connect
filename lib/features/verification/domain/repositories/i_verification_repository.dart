@@ -12,12 +12,19 @@ abstract class IVerificationRepository {
   /// Count faces in an image (ID or selfie).
   Future<int> countFaces(File imageFile);
 
-  /// Crop the primary face from an image for ARSA comparison.
+  /// Crop the primary face from an image for face embedding comparison.
   Future<File?> cropPrimaryFace(File imageFile);
+
+  /// Compares cropped ID face against cropped Selfie face using local embeddings.
+  Future<Map<String, dynamic>> compareFaces({
+    required File idCardFace,
+    required File selfieFace,
+  });
 
   /// Upload photos and create a submission record in Firebase
   Future<void> submitVerification({
     required String userId,
     required VerificationData data,
+    required String status,
   });
 }

@@ -120,17 +120,14 @@ class FirestoreService {
 
   // ==========================================
   // IDENTITY VERIFICATION METHODS
-  // (Optional feature path — not part of auth routing)
   // ==========================================
 
-  /// Saves the user's identity verification submission along with ARSA Face API
-  /// comparison scores for PRC Admin review.
-  ///
-  /// Caller must only invoke this after a successful ARSA comparison.
-  /// Status remains `pending` for admin review — never auto-verified here.
+  /// Saves the user's identity verification submission to `/verificationRequests`
+  /// and updates primary user data in `/users/{userId}` with the passed `status`.
   Future<void> submitVerificationRecord({
     required String userId,
     required VerificationData data,
+    required String status,
     required String idCloudinaryUrl,
     String? backIdCloudinaryUrl,
     required String selfieCloudinaryUrl,
@@ -138,39 +135,51 @@ class FirestoreService {
     bool? faceMatchPassed,
   }) async {
     final batch = _firestore.batch();
+    final now = FieldValue.serverTimestamp();
 
     final double? confidenceScore =
         faceMatchConfidence ?? data.faceMatchConfidence;
     final bool? matchPassed = faceMatchPassed ?? data.faceMatchPassed;
 
-    // 1. Create/Update verification record for admin audit
-    final verificationRef = _firestore.collection('verifications').doc(userId);
-    batch.set(verificationRef, {
+    // 1. Audit Log in /verificationRequests
+    final verificationReqRef = _firestore
+        .collection('verificationRequests')
+        .doc();
+
+    batch.set(verificationReqRef, {
+      'requestId': verificationReqRef.id,
       'userId': userId,
+      'status': status,
       'idType': data.idType,
       'idNumber': data.idNumber,
       'extractedName': data.extractedName,
       'extractedBirthDate': data.extractedBirthDate,
       'extractedGender': data.extractedGender,
-      'idPhotoUrl': idCloudinaryUrl,
-      'backIdPhotoUrl': backIdCloudinaryUrl,
-      'selfieUrl': selfieCloudinaryUrl,
+      'idImageUrl': idCloudinaryUrl,
+      'backIdImageUrl': backIdCloudinaryUrl,
+      'selfieImageUrl': selfieCloudinaryUrl,
       'hasDetectedFace': data.hasDetectedFace,
       'faceMatchConfidence': confidenceScore,
       'faceMatchPassed': matchPassed,
-      'verificationProvider': data.verificationProvider ?? 'arsa',
-      'status': 'pending',
-      'submittedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'verificationProvider': data.verificationProvider ?? 'local_facenet',
+      'submittedAt': now,
+    });
 
-    // 2. Atomically sync extracted identity details & status to `users` profile
+    // 2. Sync to Primary User Profile in /users/{userId}
     final userRef = _firestore.collection('users').doc(userId);
     batch.set(userRef, {
       if (data.extractedName != null) 'fullName': data.extractedName,
       if (data.extractedBirthDate != null) 'birthDate': data.extractedBirthDate,
       if (data.extractedGender != null) 'gender': data.extractedGender,
-      'verificationStatus': 'pending',
-      'updatedAt': FieldValue.serverTimestamp(),
+      'idType': data.idType,
+      'idNumber': data.idNumber,
+      'idImageUrl': idCloudinaryUrl,
+      'backIdImageUrl': backIdCloudinaryUrl,
+      'selfieImageUrl': selfieCloudinaryUrl,
+      'faceMatchSimilarity': confidenceScore,
+      'verificationStatus': status,
+      'lastVerificationRequestId': verificationReqRef.id,
+      'updatedAt': now,
     }, SetOptions(merge: true));
 
     await batch.commit();
