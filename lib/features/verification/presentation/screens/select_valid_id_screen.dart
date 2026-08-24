@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../provider/verification_provider.dart';
 import 'capture_id_screen.dart';
 
@@ -59,8 +60,6 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     if (_selectedIdKey == null) return;
 
     final provider = context.read<VerificationProvider>();
-
-    // Persist the selected ID type so it's actually saved to Firestore.
     provider.setIdType(_selectedIdKey!);
 
     Navigator.push(
@@ -76,65 +75,184 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Identity Verification'),
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        backgroundColor: colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
       ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // --- Header Section ---
-                    Text(
-                      'Select a Valid Government ID',
-                      style: theme.textTheme.headlineSmall?.copyWith(
+                    const Text(
+                      'Select Your ID',
+                      style: TextStyle(
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
+                        color: Colors.black87,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
-                      'Choose the government-issued ID you will submit for identity verification.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                      'Choose the government-issued ID you will capture for verification. You will take a photo of the front and back.',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: Colors.black54,
+                        height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
-                    // --- ID Selection List ---
+                    // --- Top Instruction Banner Container ---
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'You will take photos of:',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Front of your ID',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Back of your ID',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 60,
+                            color: Colors.grey.shade200,
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                          Expanded(
+                            child: Row(
+                              children: const [
+                                Icon(
+                                  Icons.lightbulb_outline,
+                                  color: Color(0xFFC62828),
+                                  size: 24,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Make sure your ID is clear and details are visible.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: Colors.black54,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    const Text(
+                      'Accepted IDs',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // --- ID Selection Cards ---
                     ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _idOptions.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final option = _idOptions[index];
                         final isSelected = _selectedIdKey == option.idKey;
 
-                        return Card(
-                          elevation: isSelected ? 2 : 0,
-                          color: isSelected
-                              ? colorScheme.primaryContainer.withOpacity(0.3)
-                              : colorScheme.surfaceVariant.withOpacity(0.3),
-                          shape: RoundedRectangleBorder(
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(
+                            border: Border.all(
                               color: isSelected
-                                  ? colorScheme.primary
-                                  : colorScheme.outlineVariant,
+                                  ? const Color(0xFFC62828)
+                                  : Colors.grey.shade200,
                               width: isSelected ? 2.0 : 1.0,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(16),
@@ -147,26 +265,23 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                               padding: const EdgeInsets.all(16.0),
                               child: Row(
                                 children: [
-                                  // Leading Icon
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: isSelected
-                                          ? colorScheme.primary
-                                          : colorScheme.surface,
+                                          ? const Color(0xFFFFEBEE)
+                                          : Colors.grey.shade100,
                                       shape: BoxShape.circle,
                                     ),
                                     child: Icon(
                                       option.icon,
                                       color: isSelected
-                                          ? colorScheme.onPrimary
-                                          : colorScheme.onSurfaceVariant,
-                                      size: 24,
+                                          ? const Color(0xFFC62828)
+                                          : Colors.black54,
+                                      size: 22,
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
-
-                                  // ID Title & Subtitle
+                                  const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -174,35 +289,58 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                                       children: [
                                         Text(
                                           option.title,
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color: colorScheme.onSurface,
-                                              ),
+                                          style: const TextStyle(
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
                                           option.subtitle,
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                color: colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black.withOpacity(
+                                              0.5,
+                                            ),
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
-
-                                  // Selected Indicator
-                                  Radio<String>(
-                                    value: option.idKey,
-                                    groupValue: _selectedIdKey,
-                                    activeColor: colorScheme.primary,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selectedIdKey = value;
-                                      });
-                                    },
+                                  // Action Pill / Arrow Indicator
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? const Color(0xFFFFEBEE)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (isSelected)
+                                          const Text(
+                                            'Selected',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFFC62828),
+                                            ),
+                                          ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color: isSelected
+                                              ? const Color(0xFFC62828)
+                                              : Colors.black26,
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -211,129 +349,114 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                         );
                       },
                     ),
+                    const SizedBox(height: 16),
 
-                    const SizedBox(height: 28),
-
-                    // --- Requirements Container ---
+                    // --- Security Privacy Notice Banner ---
                     Container(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: colorScheme.surfaceVariant.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: colorScheme.outlineVariant),
+                        color: const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.green.withOpacity(0.3),
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                color: colorScheme.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Requirements',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onSurfaceVariant,
+                      child: Row(
+                        children: const [
+                          Icon(
+                            Icons.security_rounded,
+                            color: Color(0xFF2E7D32),
+                            size: 22,
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Your data is secure',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1B5E20),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          _buildRequirementItem(
-                            theme,
-                            'Use an original government-issued ID.',
-                          ),
-                          _buildRequirementItem(
-                            theme,
-                            'Expired IDs may be rejected.',
-                          ),
-                          _buildRequirementItem(
-                            theme,
-                            'Make sure all text is readable.',
-                          ),
-                          _buildRequirementItem(
-                            theme,
-                            'The information should match your Blood-Connect profile.',
+                                SizedBox(height: 2),
+                                Text(
+                                  'We use industry-standard security to protect your information.',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: Color(0xFF2E7D32),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
             ),
 
-            // --- Sticky Bottom Action ---
+            // --- Sticky Bottom Action Area ---
             Container(
               padding: const EdgeInsets.all(20.0),
               decoration: BoxDecoration(
-                color: theme.scaffoldBackgroundColor,
+                color: AppColors.background,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withOpacity(0.04),
                     blurRadius: 10,
                     offset: const Offset(0, -4),
                   ),
                 ],
               ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: _selectedIdKey != null ? _onContinuePressed : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    disabledBackgroundColor: colorScheme.onSurface.withOpacity(
-                      0.12,
-                    ),
-                    disabledForegroundColor: colorScheme.onSurface.withOpacity(
-                      0.38,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _selectedIdKey != null
+                          ? _onContinuePressed
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(
+                          0xFFC62828,
+                        ), // Blood-Connect Red Accent
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        disabledForegroundColor: Colors.grey.shade500,
+                      ),
+                      child: const Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  const SizedBox(height: 8),
+                  Text(
+                    _selectedIdKey == null
+                        ? 'Please select an ID to continue'
+                        : 'Ready to capture',
+                    style: TextStyle(fontSize: 11.5, color: Colors.black54),
                   ),
-                ),
+                ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRequirementItem(ThemeData theme, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '• ',
-            style: TextStyle(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

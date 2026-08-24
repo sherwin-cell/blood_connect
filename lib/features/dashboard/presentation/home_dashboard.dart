@@ -4,6 +4,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../auth/data/auth_service.dart';
 import '../../profile/domain/user_profile_model.dart';
+import '../../profile/presentation/profile_menu_screen.dart';
+import '../../verification/presentation/screens/verification_rejected_screen.dart';
 import 'views/home_tab_view.dart';
 import 'views/activity_tab_view.dart';
 import 'views/notifications_tab_view.dart';
@@ -25,6 +27,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   Future<void> _signOut() async {
     try {
       await _authService.logout();
+      // Letting AuthGate / root stream handle the navigation back to Login automatically
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -38,7 +41,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const Scaffold(body: Center(child: Text('No user logged in.')));
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primaryRed),
+        ),
+      );
     }
 
     return StreamBuilder<UserProfile?>(
@@ -53,7 +60,22 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
 
         final profile = snapshot.data;
+        final String status = (profile?.verificationStatus ?? '').toLowerCase();
         final bool isVerified = profile?.isVerified ?? false;
+
+        // Verification State Flags
+        final bool isRejected = status == 'rejected';
+        final bool isPending = status == 'pending' || status == 'under_review';
+
+        // IF REJECTED: Intercept dashboard view and display rejection screen with admin notes
+        if (isRejected) {
+          final rejectionData = {
+            'adminNotes':
+                profile?.adminNotes ??
+                'No specific notes provided by the administrator.',
+          };
+          return VerificationRejectedScreen(rejectionDetails: rejectionData);
+        }
 
         return Scaffold(
           backgroundColor: const Color(0xFFF9F9F9),
@@ -76,13 +98,21 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 ),
                 onPressed: () {},
               ),
+              // Profile Avatar Icon: Opens the separate ProfileMenuScreen
               IconButton(
                 icon: const Icon(
                   Icons.account_circle,
                   color: Colors.black38,
                   size: 28,
                 ),
-                onPressed: () => setState(() => _selectedIndex = 3),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          ProfileMenuScreen(onSignOut: _signOut),
+                    ),
+                  );
+                },
               ),
               const SizedBox(width: 8),
             ],
@@ -95,10 +125,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
                   HomeTabView(profile: profile),
                   const ActivityTabView(),
                   const NotificationsTabView(),
-                  HistoryTabView(onSignOut: _signOut),
+                  const HistoryTabView(),
                 ],
               ),
-              if (!isVerified)
+
+              // Only display the banner if the user is unverified and not currently pending
+              if (!isVerified && !isPending)
                 Positioned(
                   left: 16,
                   right: 16,

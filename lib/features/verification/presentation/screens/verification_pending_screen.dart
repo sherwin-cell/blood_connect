@@ -20,24 +20,20 @@ class _VerificationPendingScreenState extends State<VerificationPendingScreen> {
   @override
   void initState() {
     super.initState();
-    // Schedule check after the frame builds to prevent navigating during build phase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialStatus();
       _listenToVerificationStatus();
     });
   }
 
-  /// Check current status in case it was resolved before listener initialized
   void _checkInitialStatus() {
     if (!mounted) return;
     final provider = context.read<VerificationProvider>();
     _handleStatusChange(provider.status);
   }
 
-  /// Listen for real-time verification updates from Firestore via Provider
   void _listenToVerificationStatus() {
     final provider = context.read<VerificationProvider>();
-
     _statusSubscription = provider.statusStream.listen((status) {
       if (!mounted) return;
       _handleStatusChange(status);
@@ -54,8 +50,6 @@ class _VerificationPendingScreenState extends State<VerificationPendingScreen> {
 
   void _goToDashboard() {
     if (!mounted) return;
-
-    // Clear navigation stack and return to the main home dashboard
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const HomeDashboard()),
       (route) => false,
@@ -67,6 +61,7 @@ class _VerificationPendingScreenState extends State<VerificationPendingScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Verification Failed'),
         content: const Text(
           'Your identity verification could not be approved. '
@@ -101,67 +96,135 @@ class _VerificationPendingScreenState extends State<VerificationPendingScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: const Color(
+          0xFF1E1E2C,
+        ), // Dark sleek background matching reference
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          automaticallyImplyLeading: false, // Prevents default back button
+          automaticallyImplyLeading: false,
         ),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 16.0,
+            ),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.hourglass_top_rounded,
-                  size: 80,
-                  color: Colors.orange,
+                const Spacer(),
+
+                // --- Success / Pending Checkmark Badge Icon ---
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 130,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.18),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF00C853), // Vibrant success green
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        size: 60,
+                        color: Colors.white,
+                      ),
+                    ),
+                    // Sparkle decorative placements matching your layout style
+                    const Positioned(
+                      top: 10,
+                      right: 15,
+                      child: Icon(
+                        Icons.auto_awesome,
+                        color: Colors.greenAccent,
+                        size: 22,
+                      ),
+                    ),
+                    const Positioned(
+                      bottom: 15,
+                      left: 10,
+                      child: Icon(
+                        Icons.auto_awesome,
+                        color: Colors.greenAccent,
+                        size: 18,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 36),
+
+                // --- Titles ---
                 const Text(
-                  'Verification Under Review',
-                  textAlign: TextAlign.center,
+                  'Congratulations!',
                   style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.greenAccent,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 const Text(
-                  'Your identity verification details have been submitted and are currently being reviewed. This usually takes up to 24 hours.',
+                  'Your application\nsubmitted',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.black54,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // --- Description ---
+                const Text(
+                  "Your application is currently under review and may take 2-4 hours. You'll be notified once it's accepted",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white70,
                     height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
+
+                const Spacer(),
+
+                // --- Primary Action Button ---
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 52,
                   child: ElevatedButton(
                     onPressed: _goToDashboard,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryRed,
+                      backgroundColor: const Color(
+                        0xFF7C69EE,
+                      ), // Soft purple/indigo accent button
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       elevation: 0,
                     ),
                     child: const Text(
-                      'Back to Dashboard',
+                      'Go to Dashboard',
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
             ),
           ),

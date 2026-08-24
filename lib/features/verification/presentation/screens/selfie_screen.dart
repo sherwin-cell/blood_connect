@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +8,15 @@ import 'package:provider/provider.dart';
 
 import '../provider/verification_provider.dart';
 import 'review_all_screen.dart';
-import '../widgets/selfie_camera_overlay.dart';
 
-enum LivenessStep { moveCloser, turnLeft, turnRight, smile, completed }
+enum LivenessStep {
+  lookStraight,
+  turnLeft,
+  turnRight,
+  smile,
+  countingDown,
+  completed,
+}
 
 class SelfieScreen extends StatefulWidget {
   const SelfieScreen({super.key});
@@ -26,10 +33,13 @@ class _SelfieScreenState extends State<SelfieScreen>
   bool _isInitializing = true;
   bool _isProcessingFrame = false;
   bool _isNavigatingAway = false;
-  bool _isCountingDown = false;
+
+  // Progress from 0.0 to 1.0 for the tick ring
+  double _progressValue = 0.0;
+  bool _isInsideOval = false;
   int _countdownSeconds = 3;
 
-  LivenessStep _currentStep = LivenessStep.moveCloser;
+  LivenessStep _currentStep = LivenessStep.lookStraight;
 
   @override
   void initState() {
@@ -52,10 +62,8 @@ class _SelfieScreenState extends State<SelfieScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final CameraController? cameraController = _cameraController;
-
-    if (cameraController == null || !cameraController.value.isInitialized) {
+    if (cameraController == null || !cameraController.value.isInitialized)
       return;
-    }
 
     if (state == AppLifecycleState.inactive) {
       cameraController.dispose();
@@ -101,7 +109,7 @@ class _SelfieScreenState extends State<SelfieScreen>
   Future<void> _processCameraFrame(CameraImage image) async {
     if (_isProcessingFrame ||
         _isNavigatingAway ||
-        _isCountingDown ||
+        _currentStep == LivenessStep.countingDown ||
         _currentStep == LivenessStep.completed) {
       return;
     }
@@ -114,7 +122,13 @@ class _SelfieScreenState extends State<SelfieScreen>
 
       final faces = await _faceDetector.processImage(inputImage);
       if (faces.isNotEmpty) {
-        _evaluateLiveness(faces.first);
+        _evaluateFlow(faces.first, image);
+      } else {
+        if (mounted && _isInsideOval) {
+          setState(() {
+            _isInsideOval = false;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error processing liveness frame: $e');
@@ -123,59 +137,76 @@ class _SelfieScreenState extends State<SelfieScreen>
     }
   }
 
-  void _evaluateLiveness(Face face) {
+  void _evaluateFlow(Face face, CameraImage image) {
     final double? headY = face.headEulerAngleY;
     final double? smileProb = face.smilingProbability;
 
-    final double screenWidth = MediaQuery.of(context).size.width;
     final Rect boundingBox = face.boundingBox;
-    final double faceWidth = boundingBox.width;
-    final double faceRatio = faceWidth / screenWidth;
+    final double imgWidth = image.width.toDouble();
+    final double imgHeight = image.height.toDouble();
+
+    final double faceWidthRatio = boundingBox.width / imgWidth;
+    final double faceHeightRatio = boundingBox.height / imgHeight;
+
+    bool isInside =
+        faceWidthRatio >= 0.20 &&
+        faceWidthRatio <= 0.80 &&
+        faceHeightRatio >= 0.20 &&
+        faceHeightRatio <= 0.80;
+
+    if (isInside != _isInsideOval) {
+      setState(() {
+        _isInsideOval = isInside;
+      });
+    }
+
+    if (!isInside) return;
 
     switch (_currentStep) {
-      case LivenessStep.moveCloser:
-        // Adjusted threshold to 0.32 so it effortlessly fits your oval overlay guide
-        if (faceRatio >= 0.32 && (headY == null || headY.abs() < 15)) {
-          _advanceStep(LivenessStep.turnLeft);
+      case LivenessStep.lookStraight:
+        if (headY == null || headY.abs() < 18) {
+          setState(() {
+            _progressValue = 0.25;
+            _currentStep = LivenessStep.turnLeft;
+          });
         }
         break;
 
       case LivenessStep.turnLeft:
-        if (headY != null && headY > 20) {
-          _advanceStep(LivenessStep.turnRight);
+        if (headY != null && headY > 15) {
+          setState(() {
+            _progressValue = 0.55;
+            _currentStep = LivenessStep.turnRight;
+          });
         }
         break;
 
       case LivenessStep.turnRight:
-        if (headY != null && headY < -20) {
-          _advanceStep(LivenessStep.smile);
+        if (headY != null && headY < -15) {
+          setState(() {
+            _progressValue = 0.85;
+            _currentStep = LivenessStep.smile;
+          });
         }
         break;
 
       case LivenessStep.smile:
-        if (smileProb != null && smileProb > 0.60 && !_isCountingDown) {
-          _advanceStep(LivenessStep.completed);
+        if (smileProb != null && smileProb > 0.40) {
+          setState(() {
+            _progressValue = 1.0;
+            _currentStep = LivenessStep.countingDown;
+          });
           _startAutoCaptureCountdown();
         }
         break;
 
+      case LivenessStep.countingDown:
       case LivenessStep.completed:
         break;
     }
   }
 
-  void _advanceStep(LivenessStep step) {
-    if (mounted) {
-      setState(() => _currentStep = step);
-    }
-  }
-
   Future<void> _startAutoCaptureCountdown() async {
-    setState(() {
-      _isCountingDown = true;
-      _countdownSeconds = 3;
-    });
-
     await _cameraController?.stopImageStream();
 
     for (int i = 3; i > 0; i--) {
@@ -184,10 +215,9 @@ class _SelfieScreenState extends State<SelfieScreen>
       await Future.delayed(const Duration(seconds: 1));
     }
 
-    if (mounted) {
-      setState(() => _isCountingDown = false);
-      await _completeLivenessCheck();
-    }
+    if (!mounted) return;
+    setState(() => _currentStep = LivenessStep.completed);
+    await _completeLivenessCheck();
   }
 
   Future<void> _completeLivenessCheck() async {
@@ -207,15 +237,16 @@ class _SelfieScreenState extends State<SelfieScreen>
       if (!mounted) return;
 
       if (!hasFace) {
-        setState(() => _currentStep = LivenessStep.moveCloser);
+        setState(() {
+          _currentStep = LivenessStep.lookStraight;
+          _progressValue = 0.0;
+          _countdownSeconds = 3;
+        });
         _cameraController?.startImageStream(_processCameraFrame);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              provider.errorMessage ??
-                  'Liveness check failed. Please try again.',
-            ),
-            backgroundColor: Colors.amber[900],
+          const SnackBar(
+            content: Text('Face check failed. Please remain inside the oval.'),
+            backgroundColor: Colors.redAccent,
           ),
         );
         return;
@@ -239,7 +270,9 @@ class _SelfieScreenState extends State<SelfieScreen>
       if (mounted) {
         setState(() {
           _isNavigatingAway = false;
-          _currentStep = LivenessStep.moveCloser;
+          _currentStep = LivenessStep.lookStraight;
+          _progressValue = 0.0;
+          _countdownSeconds = 3;
         });
         await _cameraController?.resumePreview().catchError((_) {});
         _cameraController?.startImageStream(_processCameraFrame);
@@ -297,193 +330,232 @@ class _SelfieScreenState extends State<SelfieScreen>
       );
     }
 
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.videocam_off, color: Colors.white54, size: 64),
-              const SizedBox(height: 16),
-              const Text(
-                'Camera unavailable.',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _initializeCamera,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final bool isCompleted = _currentStep == LivenessStep.completed;
+    final bool isCounting = _currentStep == LivenessStep.countingDown;
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('Liveness Verification'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-      ),
-      body: Stack(
-        children: [
-          if (!_isNavigatingAway &&
-              _cameraController != null &&
-              _cameraController!.value.isInitialized)
-            Center(
-              child: AspectRatio(
-                aspectRatio: 1 / _cameraController!.value.aspectRatio,
-                child: CameraPreview(_cameraController!),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Cancel Button
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(50, 30),
+                  alignment: Alignment.centerLeft,
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.blueAccent, fontSize: 16),
+                ),
               ),
-            )
-          else
-            const Positioned.fill(child: ColoredBox(color: Colors.black)),
+              const Spacer(flex: 1),
 
-          _buildStepIndicators(),
+              // Center Oval Camera Frame & Segmented Ticks / Countdown Overlay
+              Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 350,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Oval Hollow Camera Mask Container
+                      Container(
+                        width: 210,
+                        height: 280,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.rectangle,
+                          borderRadius: BorderRadius.all(
+                            Radius.elliptical(210, 280),
+                          ),
+                        ),
+                        child: ClipOval(
+                          child:
+                              (!_isNavigatingAway &&
+                                  _cameraController != null &&
+                                  _cameraController!.value.isInitialized)
+                              ? OverflowBox(
+                                  alignment: Alignment.center,
+                                  child: CameraPreview(_cameraController!),
+                                )
+                              : Container(color: Colors.black),
+                        ),
+                      ),
 
-          SelfieCameraOverlay(isPassed: _currentStep == LivenessStep.completed),
+                      // Segmented Tick Oval Ring Painter
+                      CustomPaint(
+                        size: const Size(280, 350),
+                        painter: FaceIDOvalTickRingPainter(
+                          progress: _progressValue,
+                          isComplete: isCompleted || isCounting,
+                          isInsideOval: _isInsideOval,
+                        ),
+                      ),
 
-          if (_isCountingDown)
-            Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) =>
-                    ScaleTransition(scale: animation, child: child),
-                child: Container(
-                  key: ValueKey<int>(_countdownSeconds),
-                  padding: const EdgeInsets.all(32),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
+                      // 3, 2, 1 Countdown overlay in the center
+                      if (isCounting)
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$_countdownSeconds',
+                            style: const TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 64,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+                ),
+              ),
+
+              const Spacer(flex: 2),
+
+              // Bottom Instruction Text
+              Center(
+                child: Text(
+                  isCompleted
+                      ? 'First Face ID scan complete.'
+                      : (isCounting
+                            ? 'Taking picture in $_countdownSeconds...'
+                            : (!_isInsideOval
+                                  ? 'Align face inside the oval (WAIT)'
+                                  : _getInstructionText())),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: !_isInsideOval ? Colors.amberAccent : Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Bottom Action Area
+              if (isCompleted)
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _completeLivenessCheck,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                const Center(
                   child: Text(
-                    '$_countdownSeconds',
-                    style: const TextStyle(
-                      color: Colors.greenAccent,
-                      fontSize: 72,
-                      fontWeight: FontWeight.bold,
+                    'Accessibility Options',
+                    style: TextStyle(
+                      color: Colors.blueAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-              ),
-            ),
-
-          _buildInstructionBadge(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepIndicators() {
-    return Positioned(
-      top: 20,
-      left: 12,
-      right: 12,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _stepChip(LivenessStep.moveCloser, 'Closer'),
-          _stepChip(LivenessStep.turnLeft, 'Turn Left'),
-          _stepChip(LivenessStep.turnRight, 'Turn Right'),
-          _stepChip(LivenessStep.smile, 'Smile'),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepChip(LivenessStep step, String label) {
-    final bool isDone = _currentStep.index > step.index;
-    final bool isCurrent = _currentStep == step;
-
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: isDone
-              ? Colors.green
-              : (isCurrent ? Colors.redAccent : Colors.grey[800]),
-          child: isDone
-              ? const Icon(Icons.check, size: 14, color: Colors.white)
-              : Text(
-                  '${step.index + 1}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: isCurrent ? Colors.white : Colors.white54,
-            fontSize: 10,
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+              const SizedBox(height: 20),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildInstructionBadge() {
-    String text = '';
-    IconData icon = Icons.face;
-
+  String _getInstructionText() {
     switch (_currentStep) {
-      case LivenessStep.moveCloser:
-        text = 'Move closer to fill the frame';
-        icon = Icons.zoom_in;
-        break;
+      case LivenessStep.lookStraight:
+        return 'Look straight into the camera.';
       case LivenessStep.turnLeft:
-        text = 'Slowly turn your head LEFT';
-        icon = Icons.arrow_back;
-        break;
+        return 'Slowly turn your head to the LEFT.';
       case LivenessStep.turnRight:
-        text = 'Slowly turn your head RIGHT';
-        icon = Icons.arrow_forward;
-        break;
+        return 'Slowly turn your head to the RIGHT.';
       case LivenessStep.smile:
-        text = 'Hold position and SMILE';
-        icon = Icons.sentiment_very_satisfied;
-        break;
+        return 'Hold steady and SMILE.';
+      case LivenessStep.countingDown:
+        return 'Get ready...';
       case LivenessStep.completed:
-        text = 'Verification Complete!';
-        icon = Icons.check_circle;
-        break;
+        return 'First Face ID scan complete.';
     }
+  }
+}
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 40, left: 24, right: 24),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white24),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.redAccent, size: 26),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+/// Custom painter to draw segmented tick marks along an Oval path
+class FaceIDOvalTickRingPainter extends CustomPainter {
+  final double progress;
+  final bool isComplete;
+  final bool isInsideOval;
+
+  FaceIDOvalTickRingPainter({
+    required this.progress,
+    required this.isComplete,
+    required this.isInsideOval,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    const double radiusX = 110.0;
+    const double radiusY = 145.0;
+    const totalTicks = 60;
+
+    final paint = Paint()
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round;
+
+    for (int i = 0; i < totalTicks; i++) {
+      final double angle = (i * 2 * math.pi / totalTicks) - (math.pi / 2);
+      final double tickProgress = i / totalTicks;
+
+      if (isComplete) {
+        paint.color = Colors.greenAccent;
+      } else if (!isInsideOval) {
+        paint.color = Colors.amber.withOpacity(0.4);
+      } else if (tickProgress <= progress) {
+        paint.color = Colors.greenAccent;
+      } else {
+        paint.color = Colors.grey.withOpacity(0.35);
+      }
+
+      final double cosA = math.cos(angle);
+      final double sinA = math.sin(angle);
+
+      final startX = center.dx + (radiusX - 8) * cosA;
+      final startY = center.dy + (radiusY - 8) * sinA;
+      final endX = center.dx + (radiusX + 2) * cosA;
+      final endY = center.dy + (radiusY + 2) * sinA;
+
+      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant FaceIDOvalTickRingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.isComplete != isComplete ||
+        oldDelegate.isInsideOval != isInsideOval;
   }
 }

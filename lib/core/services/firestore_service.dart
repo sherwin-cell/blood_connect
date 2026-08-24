@@ -124,10 +124,12 @@ class FirestoreService {
 
   /// Saves the user's identity verification submission to `/verificationRequests`
   /// and updates primary user data in `/users/{userId}` with the passed `status`.
+  /// Saves the user's identity verification submission to `/verificationRequests` as a history log
+  /// (without status), and updates primary user data in `/users/{userId}` with the active `status`.
   Future<void> submitVerificationRecord({
     required String userId,
     required VerificationData data,
-    required String status,
+    required String status, // 'pending' goes to the user profile only
     required String idCloudinaryUrl,
     String? backIdCloudinaryUrl,
     required String selfieCloudinaryUrl,
@@ -141,7 +143,7 @@ class FirestoreService {
         faceMatchConfidence ?? data.faceMatchConfidence;
     final bool? matchPassed = faceMatchPassed ?? data.faceMatchPassed;
 
-    // 1. Audit Log in /verificationRequests
+    // 1. Audit Log in /verificationRequests (NO STATUS field stored here anymore)
     final verificationReqRef = _firestore
         .collection('verificationRequests')
         .doc();
@@ -149,7 +151,7 @@ class FirestoreService {
     batch.set(verificationReqRef, {
       'requestId': verificationReqRef.id,
       'userId': userId,
-      'status': status,
+      // 'status' is intentionally removed here so it doesn't track status
       'idType': data.idType,
       'idNumber': data.idNumber,
       'extractedName': data.extractedName,
@@ -165,7 +167,7 @@ class FirestoreService {
       'submittedAt': now,
     });
 
-    // 2. Sync to Primary User Profile in /users/{userId}
+    // 2. Status and profile data live in /users/{userId} (Single Source of Truth for Status)
     final userRef = _firestore.collection('users').doc(userId);
     batch.set(userRef, {
       if (data.extractedName != null) 'fullName': data.extractedName,
@@ -177,9 +179,11 @@ class FirestoreService {
       'backIdImageUrl': backIdCloudinaryUrl,
       'selfieImageUrl': selfieCloudinaryUrl,
       'faceMatchSimilarity': confidenceScore,
-      'verificationStatus': status,
+      'verificationStatus': status, // Status lives here exclusively ('pending')
       'lastVerificationRequestId': verificationReqRef.id,
       'updatedAt': now,
+      'resubmittedAt': now,
+      'adminNotes': FieldValue.delete(), // Clears previous rejection feedback
     }, SetOptions(merge: true));
 
     await batch.commit();

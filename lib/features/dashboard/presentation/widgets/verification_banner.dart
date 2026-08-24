@@ -18,12 +18,19 @@ class _VerificationBannerState extends State<VerificationBanner> {
   Widget build(BuildContext context) {
     final String status = (widget.profile?.verificationStatus ?? '')
         .toLowerCase();
+
+    // Check if the user is currently pending or under review
     final bool isPending = status == 'pending' || status == 'under_review';
+
+    // If the user is already under review, don't show the banner at all
+    if (isPending) {
+      return const SizedBox.shrink();
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isPending ? const Color(0xFF2C2C2C) : const Color(0xFF1E1E1E),
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -44,9 +51,9 @@ class _VerificationBannerState extends State<VerificationBanner> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  isPending ? 'Verification Under Review' : 'Verify Account',
-                  style: const TextStyle(
+                const Text(
+                  'Verify Account',
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -68,64 +75,41 @@ class _VerificationBannerState extends State<VerificationBanner> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Text(
-                    isPending
-                        ? 'Your application is under PRC review. Processing usually takes up to 7 working days.'
-                        : 'Get full access to all Blood-Connect services, get verified now!',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    'Get full access to all Blood-Connect services, get verified now!',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (!isPending)
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const IdentityVerificationInfoScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1565C0),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const IdentityVerificationInfoScreen(),
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Verify Now', style: TextStyle(fontSize: 12)),
-                        SizedBox(width: 4),
-                        Icon(Icons.chevron_right, size: 16),
-                      ],
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade800,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1565C0),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
-                      'In Review',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
                     ),
                   ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Verify Now', style: TextStyle(fontSize: 12)),
+                      SizedBox(width: 4),
+                      Icon(Icons.chevron_right, size: 16),
+                    ],
+                  ),
+                ),
               ],
             ),
           ],
@@ -133,21 +117,13 @@ class _VerificationBannerState extends State<VerificationBanner> {
         secondChild: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            const Row(
               children: [
-                Icon(
-                  isPending
-                      ? Icons.hourglass_top_rounded
-                      : Icons.shield_outlined,
-                  color: isPending ? Colors.amber : Colors.white,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
+                Icon(Icons.shield_outlined, color: Colors.white, size: 18),
+                SizedBox(width: 8),
                 Text(
-                  isPending
-                      ? 'Verification pending (Takes up to 7 working days)'
-                      : 'Verify Account for full access',
-                  style: const TextStyle(
+                  'Verify Account for full access',
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,

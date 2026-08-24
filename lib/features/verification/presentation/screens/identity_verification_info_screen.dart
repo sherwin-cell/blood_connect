@@ -1,14 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../../../core/services/firestore_service.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../data/repositories/verification_repository_impl.dart';
-import '../../data/services/cloudinary_service.dart';
-import '../../data/services/face_detector_service.dart';
-import '../../data/services/ocr_service.dart';
-import '../../data/services/tflite_face_embedding_service.dart';
-import '../provider/verification_provider.dart';
 import 'select_valid_id_screen.dart';
 
 class IdentityVerificationInfoScreen extends StatelessWidget {
@@ -21,7 +13,15 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: const Text(
+          'Face Verification',
+          style: TextStyle(
+            color: Colors.black87,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         leading: Navigator.of(context).canPop()
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.black87),
@@ -31,75 +31,202 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
           child: Column(
             children: [
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 20),
+                      // Header Section
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                RichText(
+                                  text: const TextSpan(
+                                    style: TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                      height: 1.2,
+                                    ),
+                                    children: [
+                                      TextSpan(text: "Let's verify\nit's "),
+                                      TextSpan(
+                                        text: "really you",
+                                        style: TextStyle(
+                                          color: Color(0xFFD32F2F),
+                                        ), // Soft Red accent
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'This helps us keep your account secure and our community trustworthy.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black.withOpacity(0.6),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Graphic Icon Placeholder
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              height: 110,
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFFFFEBEE,
+                                ), // Soft light red
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.face_retouching_natural_rounded,
+                                  size: 54,
+                                  color: Color(0xFFC62828),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
-                      // Shield Icon Header
+                      // Privacy / Habib-Friendly Notice Card
                       Container(
-                        width: 100,
-                        height: 100,
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryRed.withOpacity(0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Icon(
-                            Icons.verified_user_rounded,
-                            size: 56,
-                            color: AppColors.primaryRed,
+                          color: const Color(0xFFFFEBEE).withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: const Color(0xFFEF9A9A).withOpacity(0.5),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Title & Subtitle
-                      const Text(
-                        'Verify Your Identity',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                        child: Row(
+                          children: const [
+                            Icon(
+                              Icons.security_rounded,
+                              color: Color(0xFFC62828),
+                              size: 24,
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Habib-Friendly & Private',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFB71C1C),
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Designed with modesty in mind for our Muslim community. Your face data is strictly confidential.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: Color(0xFF7F0000),
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'To keep Blood-Connect safe,\nplease verify your identity.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.black.withOpacity(0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 36),
+                      const SizedBox(height: 20),
 
-                      // Requirement Info Card
+                      // Tips Grid Box
                       Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryRed.withOpacity(0.05),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tips for a quick and easy verification',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: const [
+                                _TipItem(
+                                  icon: Icons.wb_sunny_outlined,
+                                  label: 'Well-lit area',
+                                ),
+                                _TipItem(
+                                  icon: Icons.face_outlined,
+                                  label: 'Face camera',
+                                ),
+                                _TipItem(
+                                  icon: Icons.phone_android_rounded,
+                                  label: 'Keep steady',
+                                ),
+                                _TipItem(
+                                  icon: Icons.tag_faces_rounded,
+                                  label: 'No face mask',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Secondary Info Card
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
                           children: const [
-                            _InfoRow(
-                              icon: Icons.badge_outlined,
-                              text: 'Government-issued ID',
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              color: Colors.blueGrey,
+                              size: 22,
                             ),
-                            SizedBox(height: 16),
-                            _InfoRow(
-                              icon: Icons.wb_sunny_outlined,
-                              text: 'Good Lighting',
-                            ),
-                            SizedBox(height: 16),
-                            _InfoRow(
-                              icon: Icons.face_outlined,
-                              text: 'A quick selfie',
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Quick, secure, and simple. It only takes a few seconds.',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.black54,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -109,47 +236,54 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 ),
               ),
 
-              // Continue Button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChangeNotifierProvider(
-                          create: (_) => VerificationProvider(
-                            repository: VerificationRepositoryImpl(
-                              ocrService: OcrService(),
-                              faceDetectorService: FaceDetectorService(),
-                              faceEmbeddingService:
-                                  TFLiteFaceEmbeddingService(),
-                              cloudinaryService: CloudinaryService(),
-                              firestoreService: FirestoreService(),
-                            ),
+              // Bottom Action Button & Footer Note
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SelectValidIdScreen(),
                           ),
-                          child: const SelectValidIdScreen(),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(
+                          0xFFC62828,
+                        ), // Soft Red theme button
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: AppColors.primaryRed, width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      child: const Text(
+                        'Start Face Verification',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryRed,
-                    ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.check_circle, color: Colors.green, size: 14),
+                      SizedBox(width: 6),
+                      Text(
+                        'We do not store your raw face data insecurely.',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 6),
+                ],
               ),
-              const SizedBox(height: 12),
             ],
           ),
         ),
@@ -158,25 +292,36 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
+class _TipItem extends StatelessWidget {
   final IconData icon;
-  final String text;
+  final String label;
 
-  const _InfoRow({required this.icon, required this.text});
+  const _TipItem({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Icon(icon, color: AppColors.primaryRed, size: 22),
-        const SizedBox(width: 16),
-        Expanded(
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFEBEE),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: const Color(0xFFC62828), size: 24),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 65,
           child: Text(
-            text,
+            label,
+            textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
               color: Colors.black87,
+              height: 1.2,
             ),
           ),
         ),
