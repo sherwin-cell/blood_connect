@@ -49,13 +49,30 @@ class _ApplyDonorScreenState extends State<ApplyDonorScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not logged in');
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'isDonor': true,
+      // Fetch basic user profile info to attach to the donor document
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final userData = userDoc.data();
+      final fullName = userData?['fullName'] ?? 'Anonymous Donor';
+      final chapter = userData?['chapter'] ?? 'PRC Chapter';
+      final email = user.email ?? '';
+
+      // Save application inside the dedicated 'donors' collection using user.uid
+      await FirebaseFirestore.instance.collection('donors').doc(user.uid).set({
+        'uid': user.uid,
+        'fullName': fullName,
+        'email': email,
+        'chapter': chapter,
+        'isDonor': false, // Not active yet until admin approves
+        'donorStatus': 'pending', // Pending PRC admin verification
         'bloodType': _selectedBloodType,
         'isAvailableForDonation': _isAvailable,
         'lastDonationDate': _lastDonationDate != null
             ? Timestamp.fromDate(_lastDonationDate!)
             : null,
+        'appliedForDonorAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -63,8 +80,10 @@ class _ApplyDonorScreenState extends State<ApplyDonorScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('You are now registered as an active blood donor!'),
-          backgroundColor: Colors.green,
+          content: Text(
+            'Donor application submitted! Waiting for PRC admin review.',
+          ),
+          backgroundColor: Colors.orange,
         ),
       );
 
@@ -101,6 +120,34 @@ class _ApplyDonorScreenState extends State<ApplyDonorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.orange.shade800,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Your application will be reviewed by a PRC Administrator before you appear in the public donor network.',
+                        style: TextStyle(
+                          color: Colors.orange.shade900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               const Text(
                 'Your Blood Type',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -141,7 +188,7 @@ class _ApplyDonorScreenState extends State<ApplyDonorScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey),
+                    border: Border.all(color: Colors.grey.shade400),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -190,7 +237,7 @@ class _ApplyDonorScreenState extends State<ApplyDonorScreen> {
                   child: _isSubmitting
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text(
-                          'Register as Donor',
+                          'Submit Donor Application',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,

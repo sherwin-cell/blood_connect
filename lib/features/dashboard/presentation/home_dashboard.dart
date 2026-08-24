@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
-import '../../auth/data/auth_service.dart';
 import '../../profile/domain/user_profile_model.dart';
 import '../../profile/presentation/profile_menu_screen.dart';
 import '../../verification/presentation/screens/verification_rejected_screen.dart';
@@ -21,20 +20,7 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> {
   final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
   int _selectedIndex = 0;
-
-  Future<void> _signOut() async {
-    try {
-      await _authService.logout();
-      // Letting AuthGate / root stream handle the navigation back to Login automatically
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,8 +94,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) =>
-                          ProfileMenuScreen(onSignOut: _signOut),
+                      builder: (context) => ProfileMenuScreen(),
                     ),
                   );
                 },

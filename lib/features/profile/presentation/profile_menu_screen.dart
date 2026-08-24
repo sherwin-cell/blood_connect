@@ -1,9 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../auth/presentation/login_screen.dart';
 
 class ProfileMenuScreen extends StatelessWidget {
-  final VoidCallback onSignOut;
+  const ProfileMenuScreen({super.key});
 
-  const ProfileMenuScreen({super.key, required this.onSignOut});
+  Future<void> _handleSignOut(BuildContext context) async {
+    try {
+      // 1. Sign out from Firebase Auth
+      await FirebaseAuth.instance.signOut();
+
+      if (!context.mounted) return;
+
+      // 2. Clear entire navigation stack and push directly to LoginScreen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false, // Removes all previous routes/screens from memory
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error signing out: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   Future<void> _showSignOutConfirmation(BuildContext context) async {
     return showDialog<void>(
@@ -24,8 +48,7 @@ class ProfileMenuScreen extends StatelessWidget {
               child: const Text('Sign Out'),
               onPressed: () {
                 Navigator.of(dialogContext).pop(); // Close dialog
-                Navigator.of(context).pop(); // Close ProfileMenuScreen
-                onSignOut(); // Trigger the sign out callback
+                _handleSignOut(context); // Execute secure sign out & reset
               },
             ),
           ],

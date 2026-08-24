@@ -3,8 +3,10 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../profile/domain/user_profile_model.dart';
 import '../../../verification/presentation/screens/identity_verification_info_screen.dart';
 import '../../../verification/presentation/screens/verification_pending_screen.dart';
-import '../../../blood_request/presentation/screens/post_blood_request_screen.dart';
-import '../../../donor_application/presentation/screens/apply_donor_screen.dart';
+import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
+import '../../../blood_request/presentation/screens/donor_request_feed_screen.dart'; // Import your feed screen here
+import '../../../donor/presentation/screens/apply_donor_screen.dart';
+import '../../../donor/presentation/screens/matched_donors_screen.dart'; // Import your matched donors screen here
 import '../widgets/member_card.dart';
 
 class HomeTabView extends StatelessWidget {
@@ -93,7 +95,7 @@ class HomeTabView extends StatelessWidget {
                 context,
                 () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const PostBloodRequestScreen(),
+                    builder: (_) => const PostBloodRequestWelcomeScreen(),
                   ),
                 ),
               );
@@ -114,9 +116,9 @@ class HomeTabView extends StatelessWidget {
             onPressed: () {
               _handleProtectedFeature(
                 context,
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ApplyDonorScreen()),
-                ),
+                () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => ApplyDonorScreen())),
               );
             },
           ),
@@ -217,7 +219,16 @@ class HomeTabView extends StatelessWidget {
             title: 'Matched Donor',
             subtitle: 'View donors who are compatible with your blood request.',
             icon: Icons.people_outline,
-            onTap: () => _handleProtectedFeature(context, () {}),
+            onTap: () {
+              _handleProtectedFeature(context, () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const MatchedDonorsScreen(),
+                  ),
+                );
+              });
+            },
           ),
         ),
         const SizedBox(width: 12),
@@ -226,7 +237,16 @@ class HomeTabView extends StatelessWidget {
             title: 'Blood Requester',
             subtitle: 'View blood requests that matched your blood type.',
             icon: Icons.bloodtype_outlined,
-            onTap: () => _handleProtectedFeature(context, () {}),
+            onTap: () {
+              _handleProtectedFeature(context, () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DonorRequestFeedScreen(),
+                  ),
+                );
+              });
+            },
           ),
         ),
       ],
