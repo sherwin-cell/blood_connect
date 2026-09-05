@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../chat/presentation/screens/chat_room_screen.dart'; // Make sure this path points to your ChatRoomScreen file
 
 class MatchedDonorsScreen extends StatelessWidget {
   const MatchedDonorsScreen({super.key});
@@ -27,14 +28,10 @@ class MatchedDonorsScreen extends StatelessWidget {
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('donors') // Point to the dedicated donors collection
-            .where(
-              'donorStatus',
-              isEqualTo: 'approved',
-            ) // Check your admin approval field
+            .collection('donors')
+            .where('donorStatus', isEqualTo: 'approved')
             .snapshots(),
         builder: (context, snapshot) {
-          // ... rest of your code
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -141,12 +138,54 @@ class MatchedDonorsScreen extends StatelessWidget {
                       ),
                     ),
                     OutlinedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Direct messaging coming soon!'),
-                          ),
-                        );
+                      onPressed: () async {
+                        if (currentUserId == null) return;
+
+                        final donorUserId =
+                            data['uid'] ?? data['userId'] ?? docs[index].id;
+                        final donorName =
+                            fullName; // This is the actual name from Firestore!
+
+                        List<String> ids = [currentUserId, donorUserId];
+                        ids.sort();
+                        String chatId = ids.join('_');
+
+                        try {
+                          final chatDocRef = FirebaseFirestore.instance
+                              .collection('chats')
+                              .doc(chatId);
+
+                          // Always use set with merge: true to ensure participant names are up to date
+                          await chatDocRef.set({
+                            'chatId': chatId,
+                            'participants': [currentUserId, donorUserId],
+                            'participantNames': {
+                              donorUserId:
+                                  donorName, // Save the donor's actual name
+                            },
+                            'createdAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
+
+                          if (!context.mounted) return;
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatRoomScreen(
+                                chatId: chatId,
+                                otherUserName:
+                                    donorName, // Pass the correct name here!
+                              ),
+                            ),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Could not start chat: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primaryRed,

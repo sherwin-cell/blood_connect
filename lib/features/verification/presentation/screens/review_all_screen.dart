@@ -18,7 +18,9 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _dobController;
   late final TextEditingController _genderController;
-  late final TextEditingController _idNumberController;
+  late final TextEditingController _bloodTypeController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _phoneController;
 
   bool _isEditing = false;
   bool _isSubmitting = false;
@@ -27,14 +29,26 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
   void initState() {
     super.initState();
     final provider = Provider.of<VerificationProvider>(context, listen: false);
-    _nameController = TextEditingController(text: provider.data.extractedName);
+
+    // Pulls values directly from the data saved in Step 1 Personal Details screen
+    _nameController = TextEditingController(
+      text: provider.data.extractedName ?? '',
+    );
     _dobController = TextEditingController(
-      text: provider.data.extractedBirthDate,
+      text: provider.data.extractedBirthDate ?? '',
     );
     _genderController = TextEditingController(
-      text: provider.data.extractedGender,
+      text: provider.data.extractedGender ?? '',
     );
-    _idNumberController = TextEditingController(text: provider.data.idNumber);
+    _bloodTypeController = TextEditingController(
+      text: provider.data.bloodType ?? '',
+    );
+    _addressController = TextEditingController(
+      text: provider.data.address ?? '',
+    );
+    _phoneController = TextEditingController(
+      text: provider.data.phoneNumber ?? '',
+    );
   }
 
   @override
@@ -42,7 +56,9 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
     _nameController.dispose();
     _dobController.dispose();
     _genderController.dispose();
-    _idNumberController.dispose();
+    _bloodTypeController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -59,11 +75,19 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
 
       final String formattedName = _nameController.text.trim().toUpperCase();
 
+      provider.updatePersonalDetails(
+        fullName: formattedName,
+        birthDate: _dobController.text.trim(),
+        gender: _genderController.text.trim(),
+        bloodType: _bloodTypeController.text.trim(),
+        address: _addressController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+      );
+
       provider.updateExtractedData(
         correctedName: formattedName,
         correctedBirthDate: _dobController.text.trim(),
         correctedGender: _genderController.text.trim(),
-        correctedIdNumber: _idNumberController.text.trim(),
       );
 
       final success = await provider.submitAllDetails();
@@ -71,12 +95,8 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
       if (!mounted) return;
 
       if (success) {
-        // Corrected routing: Directs the user to the Pending Screen as per your flowchart
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                const VerificationPendingScreen(), // Make sure this is imported at the top
-          ),
+          MaterialPageRoute(builder: (_) => const VerificationPendingScreen()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +144,6 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- Header ---
                 const Text(
                   'Review Verification',
                   style: TextStyle(
@@ -143,7 +162,7 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // --- 1. Personal Details Card ---
+                // --- 1. Personal & Contact Details Card ---
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -164,7 +183,7 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Personal Details',
+                            'Personal & Contact Details',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -197,11 +216,16 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                         _buildDetailRow('Gender', _genderController.text),
                         const SizedBox(height: 12),
                         _buildDetailRow(
-                          'ID Type',
-                          verificationData.idType?.toUpperCase() ?? 'N/A',
+                          'Blood Type',
+                          _bloodTypeController.text,
                         ),
                         const SizedBox(height: 12),
-                        _buildDetailRow('ID Number', _idNumberController.text),
+                        _buildDetailRow('Address', _addressController.text),
+                        const SizedBox(height: 12),
+                        _buildDetailRow(
+                          'Contact Number',
+                          _phoneController.text,
+                        ),
                       ] else ...[
                         TextFormField(
                           controller: _nameController,
@@ -225,9 +249,23 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
-                          controller: _idNumberController,
+                          controller: _bloodTypeController,
                           decoration: const InputDecoration(
-                            labelText: 'ID Number',
+                            labelText: 'Blood Type',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _addressController,
+                          decoration: const InputDecoration(
+                            labelText: 'Address',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _phoneController,
+                          decoration: const InputDecoration(
+                            labelText: 'Contact Number',
                           ),
                         ),
                       ],
@@ -275,10 +313,10 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                               ),
                             ),
                           const SizedBox(width: 16),
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
+                              children: [
                                 _StatusCheckRow(label: 'ID uploaded'),
                                 SizedBox(height: 6),
                                 _StatusCheckRow(label: 'Information detected'),
@@ -330,10 +368,10 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
                               ),
                             ),
                           const SizedBox(width: 16),
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
+                              children: [
                                 Text(
                                   'Successfully Captured',
                                   style: TextStyle(
@@ -417,12 +455,15 @@ class _ReviewAllScreenState extends State<ReviewAllScreen> {
             color: Colors.black.withOpacity(0.5),
           ),
         ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
+        Flexible(
+          child: Text(
+            value.isNotEmpty ? value : 'N/A',
+            textAlign: TextAlign.end,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
           ),
         ),
       ],

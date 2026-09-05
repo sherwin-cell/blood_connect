@@ -15,26 +15,40 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _profileService = ProfileService();
 
+  final _fullNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _provinceController = TextEditingController();
   final _municipalityController = TextEditingController();
   final _barangayController = TextEditingController();
 
   bool _isLoading = false;
+  bool _needsFullName = false;
 
   @override
   void initState() {
     super.initState();
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null &&
-        user.phoneNumber != null &&
-        user.phoneNumber!.isNotEmpty) {
-      _phoneController.text = user.phoneNumber!;
+    if (user != null) {
+      // Check if phone is already available from auth provider
+      if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
+        _phoneController.text = user.phoneNumber!;
+      }
+
+      // Check if full name is available from Google / Auth Provider
+      final displayName = user.displayName;
+      if (displayName != null && displayName.trim().isNotEmpty) {
+        _fullNameController.text = displayName.trim();
+        _needsFullName = false;
+      } else {
+        // If Google sign-in didn't provide a name, flag that we need to collect it
+        _needsFullName = true;
+      }
     }
   }
 
   @override
   void dispose() {
+    _fullNameController.dispose();
     _phoneController.dispose();
     _provinceController.dispose();
     _municipalityController.dispose();
@@ -54,9 +68,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Save operational contact & location data to user profile
+      // Save operational contact, full name, & location data to user profile
       await _profileService.updateProfile(
         uid: user.uid,
+        fullName: _fullNameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         province: _provinceController.text.trim().isEmpty
             ? null
@@ -126,7 +141,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Your official identity (Name, DOB, Gender) will be verified from your ID in the next step.',
+                      'Please provide your details below to finalize your account setup.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -136,6 +151,53 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   ],
                 ),
                 const SizedBox(height: 32),
+
+                // Personal Details Section (Conditional Full Name)
+                // Personal Details Section
+                const _SectionTitle('Personal Details'),
+                const SizedBox(height: 12),
+
+                // Only show Full Name field if it was NOT provided by Google/Auth
+                if (_needsFullName) ...[
+                  const _FieldLabel('Full Name *'),
+                  TextFormField(
+                    controller: _fullNameController,
+                    keyboardType: TextInputType.name,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _inputDecoration('e.g. Juan Dela Cruz'),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Full Name is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 28),
+                ],
+
+                // If Google / Auth provider didn't return a name, display editable text field.
+                // Otherwise, show it pre-filled or attached automatically.
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const _FieldLabel('Full Name *'),
+                    TextFormField(
+                      controller: _fullNameController,
+                      // If the name came from Google Auth automatically, lock or let them see it
+                      keyboardType: TextInputType.name,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: _inputDecoration('e.g. Juan Dela Cruz'),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Full Name is required';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
 
                 // Contact Information Section
                 const _SectionTitle('Contact Details'),

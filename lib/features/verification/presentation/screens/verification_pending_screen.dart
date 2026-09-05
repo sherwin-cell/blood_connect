@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../dashboard/presentation/home_dashboard.dart';
 import '../provider/verification_provider.dart';
 
 class VerificationPendingScreen extends StatefulWidget {
@@ -49,10 +48,8 @@ class _VerificationPendingScreenState extends State<VerificationPendingScreen> {
 
   void _goToDashboard() {
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const HomeDashboard()),
-      (route) => false,
-    );
+    // Return to AuthGate root — it will route to Dashboard via ProfileGate.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _showRejectedDialog() {

@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../auth/presentation/login_screen.dart';
+
+import '../../auth/data/auth_service.dart';
+import '../../auth/presentation/auth_gate.dart';
 
 class ProfileMenuScreen extends StatelessWidget {
   const ProfileMenuScreen({super.key});
 
   Future<void> _handleSignOut(BuildContext context) async {
     try {
-      // 1. Sign out from Firebase Auth
-      await FirebaseAuth.instance.signOut();
+      await AuthService().logout();
 
       if (!context.mounted) return;
 
-      // 2. Clear entire navigation stack and push directly to LoginScreen
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false, // Removes all previous routes/screens from memory
+      // Reset to AuthGate so session routing (Welcome vs Dashboard) is correct.
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthGate()),
+        (_) => false,
       );
     } catch (e) {
       if (!context.mounted) return;

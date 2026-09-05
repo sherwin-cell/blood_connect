@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../provider/verification_provider.dart';
 import '../widgets/id_camera_overlay.dart';
-import 'selfie_screen.dart';
+import 'face_verification_instructions_screen.dart';
 
 class CaptureBackIdScreen extends StatefulWidget {
   const CaptureBackIdScreen({super.key});
@@ -107,7 +107,7 @@ class _CaptureBackIdScreenState extends State<CaptureBackIdScreen>
           MaterialPageRoute(
             builder: (_) => ChangeNotifierProvider.value(
               value: provider,
-              child: const SelfieScreen(),
+              child: const FaceVerificationInstructionsScreen(),
             ),
           ),
         );

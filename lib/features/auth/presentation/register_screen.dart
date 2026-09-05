@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -33,7 +34,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // Step 1 Options
   String? _selectedSuffix;
   bool _hasNoMiddleName = false;
-  final List<String> _suffixOptions = ['Jr.', 'Sr.', 'III', 'IV', 'V'];
+  final List<String> _suffixOptions = ['JR.', 'SR.', 'III', 'IV', 'V'];
 
   // Loading States
   bool _isSubmitting = false;
@@ -58,11 +59,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _returnToAuthGate() {
-    if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
   void _nextStep() {
     if (_currentStep == 0) {
       if (!_formKeyStep1.currentState!.validate()) return;
@@ -81,6 +77,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  /// Pops Login/Register off the stack so [AuthGate] can route the session.
+  void _returnToAuthGate() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   // ============================================================
   // EMAIL + PASSWORD REGISTRATION
   // ============================================================
@@ -94,11 +96,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final firstName = _firstNameController.text.trim();
+      final firstName = _firstNameController.text.trim().toUpperCase();
       final middleName = _hasNoMiddleName
           ? ''
-          : _middleNameController.text.trim();
-      final lastName = _lastNameController.text.trim();
+          : _middleNameController.text.trim().toUpperCase();
+      final lastName = _lastNameController.text.trim().toUpperCase();
       final suffix = _selectedSuffix ?? '';
 
       final List<String> nameParts = [firstName];
@@ -133,7 +135,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Update Firebase display name
       await user.updateDisplayName(fullName);
 
-      // Create Blood-Connect Firestore profile (incomplete until Complete Profile)
+      // Create Blood-Connect Firestore profile stub
       await _firestoreService.createUserProfile(
         uid: user.uid,
         fullname: fullName,
@@ -143,15 +145,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Send email verification — AuthGate shows EmailVerificationScreen next
       await _authService.sendEmailVerification();
 
-      // Return to AuthGate root (clears Login/Register stack)
       _returnToAuthGate();
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-
       _showSnackBar(AuthService.getErrorMessage(e));
     } catch (e) {
       if (!mounted) return;
-
       _showSnackBar('An unexpected error occurred. Please try again.');
     } finally {
       if (mounted) {
@@ -170,8 +169,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isGoogleLoading = true);
 
     try {
-      // Same Google → Firebase Auth flow as Login (Firebase creates Auth user
-      // on first use). AuthService ensures a Firestore profile stub exists.
       final userCredential = await _authService.signInWithGoogle();
 
       if (userCredential == null || userCredential.user == null) {
@@ -180,15 +177,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      // Return to AuthGate — ProfileGate checks profile completeness
+      // AuthService already ensures a Firestore profile stub exists.
       _returnToAuthGate();
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-
       _showSnackBar(AuthService.getErrorMessage(e));
     } catch (e) {
       if (!mounted) return;
-
       _showSnackBar('Google registration failed. Please try again.');
     } finally {
       if (mounted) {
@@ -313,10 +308,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 flex: 2,
                 child: TextFormField(
                   controller: _firstNameController,
-                  textCapitalization: TextCapitalization.words,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                  ],
                   textInputAction: TextInputAction.next,
                   style: const TextStyle(fontSize: 13, color: Colors.black87),
-                  decoration: _inputDecoration('First Name'),
+                  decoration: _inputDecoration('FIRST NAME'),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'First name is required';
@@ -331,7 +329,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: DropdownButtonFormField<String>(
                   value: _selectedSuffix,
                   style: const TextStyle(fontSize: 13, color: Colors.black87),
-                  decoration: _inputDecoration('Suffix'),
+                  decoration: _inputDecoration('SUFFIX'),
                   items: _suffixOptions.map((suffix) {
                     return DropdownMenuItem(value: suffix, child: Text(suffix));
                   }).toList(),
@@ -347,14 +345,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
           TextFormField(
             controller: _middleNameController,
             enabled: !_hasNoMiddleName,
-            textCapitalization: TextCapitalization.words,
+            textCapitalization: TextCapitalization.characters,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+            ],
             textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration('Middle Name'),
+            decoration: _inputDecoration('MIDDLE NAME (FULL)'),
             validator: (value) {
               if (!_hasNoMiddleName &&
                   (value == null || value.trim().isEmpty)) {
-                return 'Enter middle name or check the box below';
+                return 'Enter full middle name or check box below';
               }
               return null;
             },
@@ -390,10 +391,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
           TextFormField(
             controller: _lastNameController,
-            textCapitalization: TextCapitalization.words,
+            textCapitalization: TextCapitalization.characters,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+            ],
             textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration('Last Name'),
+            decoration: _inputDecoration('LAST NAME'),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return 'Last name is required';
@@ -408,8 +412,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
+            textCapitalization: TextCapitalization.none,
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration('Email Address'),
+            decoration: _inputDecoration('EMAIL ADDRESS'),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return 'Email address is required';
@@ -474,7 +479,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               onPressed: _isGoogleLoading ? null : _nextStep,
               style: _primaryButtonStyle(),
               child: const Text(
-                'Continue',
+                'CONTINUE',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
@@ -520,7 +525,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             obscureText: _obscurePassword,
             textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration('Password').copyWith(
+            decoration: _inputDecoration('PASSWORD').copyWith(
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscurePassword
@@ -552,7 +557,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => _nextStep(),
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration('Confirm Password').copyWith(
+            decoration: _inputDecoration('CONFIRM PASSWORD').copyWith(
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscureConfirmPassword
@@ -588,7 +593,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               onPressed: _nextStep,
               style: _primaryButtonStyle(),
               child: const Text(
-                'Next Step',
+                'NEXT STEP',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
@@ -600,11 +605,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // STEP 3: Review & Submit
   Widget _buildStep3() {
-    final firstName = _firstNameController.text.trim();
+    final firstName = _firstNameController.text.trim().toUpperCase();
     final middleName = _hasNoMiddleName
         ? ''
-        : _middleNameController.text.trim();
-    final lastName = _lastNameController.text.trim();
+        : _middleNameController.text.trim().toUpperCase();
+    final lastName = _lastNameController.text.trim().toUpperCase();
     final suffix = _selectedSuffix ?? '';
 
     final nameParts = [
@@ -640,9 +645,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSummaryRow('Full Name', fullName),
+              _buildSummaryRow('FULL NAME', fullName),
               const Divider(height: 20),
-              _buildSummaryRow('Email Address', _emailController.text.trim()),
+              _buildSummaryRow('EMAIL ADDRESS', _emailController.text.trim()),
             ],
           ),
         ),
@@ -665,7 +670,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   )
                 : const Text(
-                    'Create Account',
+                    'CREATE ACCOUNT',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
           ),
@@ -730,7 +735,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(width: 8),
                   const Text(
-                    'Continue with Google',
+                    'CONTINUE WITH GOOGLE',
                     style: TextStyle(
                       color: Colors.black87,
                       fontSize: 13,
@@ -763,7 +768,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   );
                 },
           child: const Text(
-            'Log In',
+            'LOG IN',
             style: TextStyle(
               color: AppColors.primaryRed,
               fontSize: 11,

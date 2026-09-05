@@ -152,8 +152,6 @@ class FirestoreService {
       'requestId': verificationReqRef.id,
       'userId': userId,
       // 'status' is intentionally removed here so it doesn't track status
-      'idType': data.idType,
-      'idNumber': data.idNumber,
       'extractedName': data.extractedName,
       'extractedBirthDate': data.extractedBirthDate,
       'extractedGender': data.extractedGender,
@@ -173,8 +171,6 @@ class FirestoreService {
       if (data.extractedName != null) 'fullName': data.extractedName,
       if (data.extractedBirthDate != null) 'birthDate': data.extractedBirthDate,
       if (data.extractedGender != null) 'gender': data.extractedGender,
-      'idType': data.idType,
-      'idNumber': data.idNumber,
       'idImageUrl': idCloudinaryUrl,
       'backIdImageUrl': backIdCloudinaryUrl,
       'selfieImageUrl': selfieCloudinaryUrl,

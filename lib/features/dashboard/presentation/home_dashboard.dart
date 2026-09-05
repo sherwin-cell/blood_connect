@@ -7,9 +7,9 @@ import '../../profile/presentation/profile_menu_screen.dart';
 import '../../verification/presentation/screens/verification_rejected_screen.dart';
 import 'views/home_tab_view.dart';
 import 'views/activity_tab_view.dart';
-import 'views/notifications_tab_view.dart';
 import 'views/history_tab_view.dart';
 import 'widgets/verification_banner.dart';
+import '../../dashboard/presentation/views/chat_list_tab.dart'; // Import the ChatListTab
 
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
@@ -77,12 +77,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ),
             ),
             actions: [
+              // Top Notification Bell Icon (Stays on top for alerts/notifications)
               IconButton(
                 icon: const Icon(
                   Icons.notifications_none_rounded,
                   color: Colors.black87,
                 ),
-                onPressed: () {},
+                onPressed: () {
+                  // Optional: Handle top notification bell click actions here
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No new notifications')),
+                  );
+                },
               ),
               // Profile Avatar Icon: Opens the separate ProfileMenuScreen
               IconButton(
@@ -109,7 +115,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 children: [
                   HomeTabView(profile: profile),
                   const ActivityTabView(),
-                  const NotificationsTabView(),
+                  const ChatListTab(), // Serves as your messages list tab
                   const HistoryTabView(),
                 ],
               ),
@@ -147,9 +153,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 label: 'Activity',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.notifications_outlined),
-                activeIcon: Icon(Icons.notifications),
-                label: 'Notification',
+                icon: Icon(
+                  Icons.chat_bubble_outline_rounded,
+                ), // Changed bottom icon to chat/messages icon
+                activeIcon: Icon(Icons.chat_bubble_rounded),
+                label: 'messages', // Bottom bar tab label
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.history),

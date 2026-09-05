@@ -91,11 +91,25 @@ class VerificationProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // ID & Selfie Operations
+  // Personal Details & ID Operations
   // ---------------------------------------------------------------------------
 
-  void setIdType(String type) {
-    _data = _data.copyWith(idType: type);
+  void updatePersonalDetails({
+    required String fullName,
+    required String birthDate,
+    required String gender,
+    required String bloodType,
+    required String address,
+    required String phoneNumber,
+  }) {
+    _data = _data.copyWith(
+      extractedName: fullName,
+      extractedBirthDate: birthDate,
+      extractedGender: gender,
+      bloodType: bloodType,
+      address: address,
+      phoneNumber: phoneNumber,
+    );
     notifyListeners();
   }
 
@@ -104,13 +118,11 @@ class VerificationProvider extends ChangeNotifier {
     String? correctedName,
     String? correctedBirthDate,
     String? correctedGender,
-    String? correctedIdNumber,
   }) {
     _data = _data.copyWith(
       extractedName: correctedName ?? _data.extractedName,
       extractedBirthDate: correctedBirthDate ?? _data.extractedBirthDate,
       extractedGender: correctedGender ?? _data.extractedGender,
-      idNumber: correctedIdNumber ?? _data.idNumber,
     );
     notifyListeners();
   }
@@ -134,22 +146,10 @@ class VerificationProvider extends ChangeNotifier {
             'Align the ID so the photo is clear and try again.';
         return false;
       }
-      if (idFaceCount > 1) {
-        _errorMessage =
-            'Multiple faces detected on the government ID. '
-            'Capture only your ID card.';
-        return false;
-      }
 
-      final ocrResults = await repository.processIdOcr(imageFile);
-
-      _data = _data.copyWith(
-        idImagePath: imageFile.path,
-        extractedName: ocrResults['extractedName'],
-        extractedBirthDate: ocrResults['extractedBirthDate'],
-        extractedGender: ocrResults['extractedGender'],
-        idNumber: ocrResults['idNumber'],
-      );
+      // FIXED: Preserves Step 1 personal details (Name, DOB, Gender)
+      // by ONLY updating the image path from OCR results without ID Type/Number.
+      _data = _data.copyWith(idImagePath: imageFile.path);
       _errorMessage = null;
       return true;
     } on NoIdDetectedException catch (e) {
@@ -192,15 +192,6 @@ class VerificationProvider extends ChangeNotifier {
       final faceCount = await repository.countFaces(imageFile);
       if (faceCount == 0) {
         _errorMessage = 'No face detected in selfie.';
-        _data = _data.copyWith(
-          selfiePath: imageFile.path,
-          hasDetectedFace: false,
-        );
-        return false;
-      }
-      if (faceCount > 1) {
-        _errorMessage =
-            'Multiple faces detected in selfie. Only one face should be visible.';
         _data = _data.copyWith(
           selfiePath: imageFile.path,
           hasDetectedFace: false,
