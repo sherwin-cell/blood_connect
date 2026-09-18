@@ -1,40 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../profile/domain/user_profile_model.dart';
-import '../../../verification/presentation/screens/identity_verification_info_screen.dart';
-import '../../../verification/presentation/screens/verification_pending_screen.dart';
 import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
-import '../../../blood_request/presentation/screens/donor_request_feed_screen.dart'; // Import your feed screen here
-import '../../../donor/presentation/screens/apply_donor_screen.dart';
-import '../../../donor/presentation/screens/matched_donors_screen.dart'; // Import your matched donors screen here
+import '../../../blood_request/presentation/screens/donor_request_feed_screen.dart';
+import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
+import '../../../donor/presentation/screens/matched_donors_screen.dart';
 import '../widgets/member_card.dart';
 
 class HomeTabView extends StatelessWidget {
   final UserProfile? profile;
 
   const HomeTabView({super.key, required this.profile});
-
-  void _handleProtectedFeature(
-    BuildContext context,
-    VoidCallback onApprovedAction,
-  ) {
-    final bool isVerified = profile?.isVerified ?? false;
-    final String status = (profile?.verificationStatus ?? '').toLowerCase();
-
-    if (isVerified || status == 'approved') {
-      onApprovedAction();
-    } else if (status == 'pending' || status == 'under_review') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const VerificationPendingScreen()),
-      );
-    } else {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const IdentityVerificationInfoScreen(),
-        ),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,12 +67,9 @@ class HomeTabView extends StatelessWidget {
             buttonColor: Colors.red.shade50,
             buttonTextColor: AppColors.primaryRed,
             onPressed: () {
-              _handleProtectedFeature(
-                context,
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const PostBloodRequestWelcomeScreen(),
-                  ),
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PostBloodRequestWelcomeScreen(),
                 ),
               );
             },
@@ -114,11 +87,10 @@ class HomeTabView extends StatelessWidget {
             buttonColor: Colors.green.shade50,
             buttonTextColor: Colors.green.shade700,
             onPressed: () {
-              _handleProtectedFeature(
-                context,
-                () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => ApplyDonorScreen())),
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ApplyDonorWelcomeScreen(),
+                ),
               );
             },
           ),
@@ -216,18 +188,18 @@ class HomeTabView extends StatelessWidget {
       children: [
         Expanded(
           child: _buildMatchingCard(
-            title: 'Matched Donor',
-            subtitle: 'View donors who are compatible with your blood request.',
+            title: 'Matched Donors',
+            subtitle: 'View donors compatible with your requests.',
             icon: Icons.people_outline,
             onTap: () {
-              _handleProtectedFeature(context, () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MatchedDonorsScreen(),
-                  ),
-                );
-              });
+              final userBloodType = profile?.bloodType ?? 'O+';
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      MatchedDonorsScreen(requesterBloodType: userBloodType),
+                ),
+              );
             },
           ),
         ),
@@ -235,17 +207,15 @@ class HomeTabView extends StatelessWidget {
         Expanded(
           child: _buildMatchingCard(
             title: 'Blood Requester',
-            subtitle: 'View blood requests that matched your blood type.',
+            subtitle: 'View blood requests matching your type.',
             icon: Icons.bloodtype_outlined,
             onTap: () {
-              _handleProtectedFeature(context, () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DonorRequestFeedScreen(),
-                  ),
-                );
-              });
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DonorRequestFeedScreen(),
+                ),
+              );
             },
           ),
         ),

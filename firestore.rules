@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Ensures regular users cannot self-approve idVerificationStatus or verificationStatus to approved/verified.
+    // Restricts write privileges for status upgrades strictly to admin roles.
+    function notSelfApprovingVerification() {
+      let newIdStatus = request.resource.data.get('idVerificationStatus', null);
+      let newVerStatus = request.resource.data.get('verificationStatus', null);
+
+      let isSelfApprovingId = (newIdStatus == 'approved' || newIdStatus == 'verified') &&
+        (!resource.data.keys().hasAll(['idVerificationStatus']) ||
+         (resource.data.idVerificationStatus != 'approved' && resource.data.idVerificationStatus != 'verified'));
+
+      let isSelfApprovingVer = (newVerStatus == 'approved' || newVerStatus == 'verified') &&
+        (!resource.data.keys().hasAll(['verificationStatus']) ||
+         (resource.data.verificationStatus != 'approved' && resource.data.verificationStatus != 'verified'));
+
+      return !isSelfApprovingId && !isSelfApprovingVer;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && notSelfApprovingVerification();
+      allow update: if isAdmin() || (isOwner(userId) && notSelfApprovingVerification());
+      allow delete: if isAdmin();
+    }
+
+    // ID Verification Submissions / Requests Collection
+    match /id_verifications/{docId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Default fallback rules
+    match /{document=**} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
+

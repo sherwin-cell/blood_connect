@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../.././donor/data/repositories/donor_repository_impl.dart';
 
 class RequestDetailsScreen extends StatefulWidget {
   final String requestId;
@@ -18,6 +20,7 @@ class RequestDetailsScreen extends StatefulWidget {
 }
 
 class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
+  final DonorRepositoryImpl _donorRepository = DonorRepositoryImpl();
   bool _isSubmitting = false;
 
   Future<void> _makePhoneCall(String phoneNumber) async {
@@ -33,20 +36,88 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     }
   }
 
+  void _showEligibilityModal() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 28),
+            SizedBox(width: 8),
+            Text('Medical Eligibility Notice', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          'Please note that offering to donate does not guarantee medical eligibility. '
+          'You will undergo a standard medical screening at the designated blood center '
+          'before the actual donation procedure can proceed.',
+          style: TextStyle(fontSize: 14, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryRed,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _commitToDonate();
+            },
+            child: const Text(
+              'I Understand & Confirm',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _commitToDonate() async {
     setState(() => _isSubmitting = true);
     try {
-      // Example action: Record donor response or update status
-      await FirebaseFirestore.instance
-          .collection('blood_requests')
-          .doc(widget.requestId)
-          .update({'respondedDonorsCount': FieldValue.increment(1)});
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      // 1. Verify user is an approved donor
+      final donorDoc = await FirebaseFirestore.instance
+          .collection('donors')
+          .doc(user.uid)
+          .get();
+
+      if (!donorDoc.exists || donorDoc.data()?['donorStatus'] != 'approved') {
+        throw Exception(
+          'You must be an approved donor by the PRC to make an offer.',
+        );
+      }
+
+      final donorData = donorDoc.data()!;
+      final donorName =
+          donorData['fullName'] ?? donorData['name'] ?? 'Anonymous Donor';
+      final donorContact = donorData['contact'] ?? donorData['phone'] ?? 'N/A';
+      final donorBloodType = donorData['bloodType'] ?? 'O+';
+
+      // 2. Submit the offer to the nested offers subcollection using repository
+      await _donorRepository.offerToDonate(
+        requestId: widget.requestId,
+        donorId: user.uid,
+        donorName: donorName,
+        donorContact: donorContact,
+        donorBloodType: donorBloodType,
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Thank you! Your willingness to donate has been recorded.',
+            'Offer sent successfully! Waiting for PRC/Admin confirmation.',
           ),
           backgroundColor: Colors.green,
         ),
@@ -54,9 +125,12 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update request: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -66,7 +140,9 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   Widget build(BuildContext context) {
     final bloodType = widget.requestData['bloodType'] ?? '--';
     final location =
-        widget.requestData['hospitalLocation'] ?? 'Unknown Location';
+        widget.requestData['hospitalLocation'] ??
+        widget.requestData['hospital'] ??
+        'Unknown Location';
     final units = widget.requestData['unitsRequired']?.toString() ?? '1';
     final contactNumber = widget.requestData['contactNumber'] ?? 'N/A';
     final notes =
@@ -87,7 +163,6 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -144,8 +219,6 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Contact Info
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -185,8 +258,6 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Notes Section
             const Text(
               'Additional Notes',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -209,13 +280,11 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               ),
             ),
             const SizedBox(height: 32),
-
-            // Action Button
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _commitToDonate,
+                onPressed: _isSubmitting ? null : _showEligibilityModal,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryRed,
                   foregroundColor: Colors.white,

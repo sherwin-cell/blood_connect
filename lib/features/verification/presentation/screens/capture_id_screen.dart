@@ -3,7 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../provider/verification_provider.dart';
+import '../provider/request_id_verification_provider.dart';
 import '../widgets/id_camera_overlay.dart';
 import 'capture_back_id_screen.dart';
 
@@ -92,7 +92,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
 
       if (!mounted) return;
 
-      final provider = Provider.of<VerificationProvider>(
+      final provider = Provider.of<RequestIdVerificationProvider>(
         context,
         listen: false,
       );
@@ -102,7 +102,6 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
       if (!mounted) return;
 
       if (success) {
-        // Detach preview surface texture before pausing & navigating
         setState(() => _isNavigatingAway = true);
         await _cameraController?.pausePreview().catchError((_) {});
 
@@ -118,7 +117,6 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
           ),
         );
 
-        // Resume camera surface if popped back to this screen
         if (mounted) {
           setState(() => _isNavigatingAway = false);
           await _cameraController?.resumePreview().catchError((_) {});
@@ -126,7 +124,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
       } else {
         _showErrorSnackBar(
           provider.errorMessage ??
-              'Could not read ID details. Please align your ID and try again.',
+              'Failed to process ID image. Please try again.',
         );
       }
     } on CameraException catch (e) {
@@ -203,7 +201,6 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
       ),
       body: Stack(
         children: [
-          // Render preview ONLY when initialized and active on screen
           if (!_isNavigatingAway &&
               _cameraController != null &&
               _cameraController!.value.isInitialized)
@@ -239,7 +236,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
                         CircularProgressIndicator(color: Colors.white),
                         SizedBox(height: 12),
                         Text(
-                          'Scanning text with OCR...',
+                          'Processing ID image...',
                           style: TextStyle(color: Colors.white, fontSize: 14),
                         ),
                       ],

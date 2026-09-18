@@ -3,9 +3,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../provider/verification_provider.dart';
+import '../provider/request_id_verification_provider.dart';
 import '../widgets/id_camera_overlay.dart';
-import 'face_verification_instructions_screen.dart';
+import 'review_id_screen.dart';
 
 class CaptureBackIdScreen extends StatefulWidget {
   const CaptureBackIdScreen({super.key});
@@ -86,7 +86,7 @@ class _CaptureBackIdScreenState extends State<CaptureBackIdScreen>
 
       if (!mounted) return;
 
-      final provider = Provider.of<VerificationProvider>(
+      final provider = Provider.of<RequestIdVerificationProvider>(
         context,
         listen: false,
       );
@@ -107,7 +107,7 @@ class _CaptureBackIdScreenState extends State<CaptureBackIdScreen>
           MaterialPageRoute(
             builder: (_) => ChangeNotifierProvider.value(
               value: provider,
-              child: const FaceVerificationInstructionsScreen(),
+              child: const ReviewIdScreen(),
             ),
           ),
         );

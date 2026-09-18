@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import 'personal_details_screen.dart';
+import 'face_verification_instructions_screen.dart';
 
 class IdentityVerificationInfoScreen extends StatelessWidget {
   const IdentityVerificationInfoScreen({super.key});
@@ -15,7 +15,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          'Identity Verification',
+          'Face Verification',
           style: TextStyle(
             color: Colors.black87,
             fontSize: 16,
@@ -39,9 +39,8 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Section
               const Text(
-                'Complete your verification',
+                'Verify your face',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -50,7 +49,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Complete these simple steps to become a verified user.',
+                'Face verification is automatic. Government IDs are submitted later with each request.',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: Colors.black54,
@@ -58,8 +57,6 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Process Timeline Header
               const Text(
                 'VERIFICATION PROCESS',
                 style: TextStyle(
@@ -70,54 +67,31 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // Step Timeline List (Compact layout)
               Expanded(
                 child: ListView(
                   physics: const ClampingScrollPhysics(),
                   children: [
-                    _buildStepItem(
-                      '1',
-                      'Personal Details',
-                      'Fill out core profile info',
-                    ),
+                    _buildStepItem('1', 'Take a selfie', 'Follow camera instructions'),
                     _buildStepItem(
                       '2',
-                      'Submit a valid ID',
-                      'Choose your government ID',
+                      'Face detection',
+                      'Keep your face inside the oval',
                     ),
                     _buildStepItem(
                       '3',
-                      'Capture ID (Front & Back)',
-                      'Take clear photos of your ID',
+                      'Liveness check',
+                      'Turn your head and smile when asked',
                     ),
                     _buildStepItem(
                       '4',
-                      'Take a selfie',
-                      'Follow camera instructions',
-                    ),
-                    _buildStepItem(
-                      '5',
-                      'Face verification',
-                      'Match selfie with ID photo',
-                    ),
-                    _buildStepItem(
-                      '6',
-                      'Review your submission',
-                      'Check details are readable',
-                    ),
-                    _buildStepItem(
-                      '7',
-                      'PRC verification',
-                      'Admin final approval',
+                      'Automatic result',
+                      'Your account is marked Face Verified',
                       isLast: true,
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
-
-              // Bottom Action Area
               SizedBox(
                 width: double.infinity,
                 height: 46,
@@ -125,7 +99,8 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const PersonalDetailsScreen(),
+                        builder: (_) =>
+                            const FaceVerificationInstructionsScreen(),
                       ),
                     );
                   },
@@ -146,7 +121,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
               const SizedBox(height: 4),
               const Center(
                 child: Text(
-                  'Takes about a few minutes to complete',
+                  'Takes about a minute to complete',
                   style: TextStyle(fontSize: 10.5, color: Colors.black54),
                 ),
               ),
@@ -157,7 +132,6 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
     );
   }
 
-  // Compact Widget helper for timeline steps
   static Widget _buildStepItem(
     String stepNumber,
     String title,

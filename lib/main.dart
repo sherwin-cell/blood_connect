@@ -8,11 +8,9 @@ import 'features/verification/domain/services/i_face_embedding_service.dart';
 import 'features/verification/data/services/tflite_face_embedding_service.dart';
 import 'features/verification/data/services/cloudinary_service.dart';
 import 'features/verification/data/services/face_detector_service.dart';
-import 'features/verification/data/services/ocr_service.dart';
 import 'features/verification/data/repositories/verification_repository_impl.dart';
 import 'features/verification/domain/repositories/i_verification_repository.dart';
 import 'features/verification/presentation/provider/verification_provider.dart';
-import 'features/verification/presentation/screens/verification_pending_screen.dart';
 
 import 'features/auth/presentation/auth_gate.dart';
 import 'features/auth/presentation/login_screen.dart';
@@ -21,6 +19,7 @@ import 'features/auth/presentation/forgot_password_screen.dart';
 import 'features/auth/presentation/email_verification_screen.dart';
 import 'features/onboarding/presentation/welcome_screen.dart';
 import 'features/splash/presentation/splash_screen.dart';
+import 'features/donor/presentation/screens/donor_pending_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,32 +44,21 @@ class BloodConnectApp extends StatelessWidget {
         // 1. Core Services
         Provider<FirestoreService>(create: (_) => FirestoreService()),
         Provider<CloudinaryService>(create: (_) => CloudinaryService()),
-        Provider<OcrService>(create: (_) => OcrService()),
         Provider<FaceDetectorService>(create: (_) => FaceDetectorService()),
 
         // 2. Production TFLite Face Embedding Service Instance
         Provider<IFaceEmbeddingService>.value(value: faceEmbeddingService),
 
-        // 3. Verification Repository Injection
-        ProxyProvider5<
-          OcrService,
+        // 3. Verification Repository Injection (4 dependencies now)
+        ProxyProvider4<
           FaceDetectorService,
           CloudinaryService,
           FirestoreService,
           IFaceEmbeddingService,
           IVerificationRepository
         >(
-          update:
-              (
-                _,
-                ocr,
-                faceDetector,
-                cloudinary,
-                firestore,
-                faceEmbedding,
-                __,
-              ) => VerificationRepositoryImpl(
-                ocrService: ocr,
+          update: (_, faceDetector, cloudinary, firestore, faceEmbedding, __) =>
+              VerificationRepositoryImpl(
                 faceDetectorService: faceDetector,
                 cloudinaryService: cloudinary,
                 firestoreService: firestore,
@@ -102,8 +90,7 @@ class BloodConnectApp extends StatelessWidget {
           '/register': (context) => const RegisterScreen(),
           '/forgot-password': (context) => const ForgotPasswordScreen(),
           '/verify-email': (context) => const EmailVerificationScreen(),
-          '/verification-pending': (context) =>
-              const VerificationPendingScreen(),
+          '/donor-pending': (context) => const DonorPendingScreen(),
         },
       ),
     );

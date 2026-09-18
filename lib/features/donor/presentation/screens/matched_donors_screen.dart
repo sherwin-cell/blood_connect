@@ -2,10 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart'; // Make sure this path points to your ChatRoomScreen file
+import '../../data/repositories/donor_repository_impl.dart';
+import '../../../chat/presentation/screens/chat_room_screen.dart';
 
 class MatchedDonorsScreen extends StatelessWidget {
-  const MatchedDonorsScreen({super.key});
+  final String requesterBloodType;
+  final DonorRepositoryImpl _donorRepository = DonorRepositoryImpl();
+
+  MatchedDonorsScreen({super.key, required this.requesterBloodType});
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +19,7 @@ class MatchedDonorsScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text(
-          'Compatible Donors',
+          'Compatible Approved Donors',
           style: TextStyle(
             color: Colors.black87,
             fontWeight: FontWeight.bold,
@@ -26,11 +30,8 @@ class MatchedDonorsScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('donors')
-            .where('donorStatus', isEqualTo: 'approved')
-            .snapshots(),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _donorRepository.getCompatibleDonorsStream(requesterBloodType),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -51,9 +52,9 @@ class MatchedDonorsScreen extends StatelessWidget {
 
           final allDocs = snapshot.data?.docs ?? [];
 
-          // Filter out the current logged-in user from the donor feed
+          // Filter out the current user's own donor profile
           final docs = allDocs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             final userId = data['uid'] ?? data['userId'];
             return doc.id != currentUserId && userId != currentUserId;
           }).toList();
@@ -70,7 +71,7 @@ class MatchedDonorsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'No other active donors found right now.',
+                    'No compatible active donors found right now.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.grey,
@@ -86,8 +87,7 @@ class MatchedDonorsScreen extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-
+              final data = docs[index].data();
               final fullName = data['fullName'] ?? 'Anonymous Donor';
               final bloodType = data['bloodType'] ?? 'N/A';
               final chapter = data['chapter'] ?? 'PRC Chapter';
@@ -140,11 +140,9 @@ class MatchedDonorsScreen extends StatelessWidget {
                     OutlinedButton(
                       onPressed: () async {
                         if (currentUserId == null) return;
-
                         final donorUserId =
                             data['uid'] ?? data['userId'] ?? docs[index].id;
-                        final donorName =
-                            fullName; // This is the actual name from Firestore!
+                        final donorName = fullName;
 
                         List<String> ids = [currentUserId, donorUserId];
                         ids.sort();
@@ -154,27 +152,20 @@ class MatchedDonorsScreen extends StatelessWidget {
                           final chatDocRef = FirebaseFirestore.instance
                               .collection('chats')
                               .doc(chatId);
-
-                          // Always use set with merge: true to ensure participant names are up to date
                           await chatDocRef.set({
                             'chatId': chatId,
                             'participants': [currentUserId, donorUserId],
-                            'participantNames': {
-                              donorUserId:
-                                  donorName, // Save the donor's actual name
-                            },
+                            'participantNames': {donorUserId: donorName},
                             'createdAt': FieldValue.serverTimestamp(),
                           }, SetOptions(merge: true));
 
                           if (!context.mounted) return;
-
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => ChatRoomScreen(
                                 chatId: chatId,
-                                otherUserName:
-                                    donorName, // Pass the correct name here!
+                                otherUserName: donorName,
                               ),
                             ),
                           );

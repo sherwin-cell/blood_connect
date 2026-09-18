@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +6,8 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:provider/provider.dart';
 
 import '../provider/verification_provider.dart';
-import 'review_all_screen.dart';
+import 'face_verification_result_screen.dart';
+import '../widgets/selfie_camera_overlay.dart';
 
 enum LivenessStep {
   lookStraight,
@@ -19,7 +19,9 @@ enum LivenessStep {
 }
 
 class SelfieScreen extends StatefulWidget {
-  const SelfieScreen({super.key});
+  final VoidCallback? onComplete;
+
+  const SelfieScreen({super.key, this.onComplete});
 
   @override
   State<SelfieScreen> createState() => _SelfieScreenState();
@@ -34,12 +36,14 @@ class _SelfieScreenState extends State<SelfieScreen>
   bool _isProcessingFrame = false;
   bool _isNavigatingAway = false;
 
-  // Progress from 0.0 to 1.0 for the tick ring
-  double _progressValue = 0.0;
   bool _isInsideOval = false;
   int _countdownSeconds = 3;
-
   LivenessStep _currentStep = LivenessStep.lookStraight;
+
+  // Photo review state tracking properties
+  File? _capturedSelfie;
+  bool _isReviewingPhoto = false;
+  bool _isProcessingPhoto = false;
 
   @override
   void initState() {
@@ -62,13 +66,16 @@ class _SelfieScreenState extends State<SelfieScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final CameraController? cameraController = _cameraController;
-    if (cameraController == null || !cameraController.value.isInitialized)
+    if (cameraController == null || !cameraController.value.isInitialized) {
       return;
+    }
 
     if (state == AppLifecycleState.inactive) {
       cameraController.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
+      if (!_isReviewingPhoto && !_isProcessingPhoto) {
+        _initializeCamera();
+      }
     }
   }
 
@@ -109,6 +116,8 @@ class _SelfieScreenState extends State<SelfieScreen>
   Future<void> _processCameraFrame(CameraImage image) async {
     if (_isProcessingFrame ||
         _isNavigatingAway ||
+        _isReviewingPhoto ||
+        _isProcessingPhoto ||
         _currentStep == LivenessStep.countingDown ||
         _currentStep == LivenessStep.completed) {
       return;
@@ -149,10 +158,10 @@ class _SelfieScreenState extends State<SelfieScreen>
     final double faceHeightRatio = boundingBox.height / imgHeight;
 
     bool isInside =
-        faceWidthRatio >= 0.20 &&
-        faceWidthRatio <= 0.80 &&
-        faceHeightRatio >= 0.20 &&
-        faceHeightRatio <= 0.80;
+        faceWidthRatio >= 0.15 &&
+        faceWidthRatio <= 0.85 &&
+        faceHeightRatio >= 0.15 &&
+        faceHeightRatio <= 0.85;
 
     if (isInside != _isInsideOval) {
       setState(() {
@@ -165,37 +174,25 @@ class _SelfieScreenState extends State<SelfieScreen>
     switch (_currentStep) {
       case LivenessStep.lookStraight:
         if (headY == null || headY.abs() < 18) {
-          setState(() {
-            _progressValue = 0.25;
-            _currentStep = LivenessStep.turnLeft;
-          });
+          setState(() => _currentStep = LivenessStep.turnLeft);
         }
         break;
 
       case LivenessStep.turnLeft:
         if (headY != null && headY > 15) {
-          setState(() {
-            _progressValue = 0.55;
-            _currentStep = LivenessStep.turnRight;
-          });
+          setState(() => _currentStep = LivenessStep.turnRight);
         }
         break;
 
       case LivenessStep.turnRight:
         if (headY != null && headY < -15) {
-          setState(() {
-            _progressValue = 0.85;
-            _currentStep = LivenessStep.smile;
-          });
+          setState(() => _currentStep = LivenessStep.smile);
         }
         break;
 
       case LivenessStep.smile:
-        if (smileProb != null && smileProb > 0.40) {
-          setState(() {
-            _progressValue = 1.0;
-            _currentStep = LivenessStep.countingDown;
-          });
+        if (smileProb != null && smileProb > 0.35) {
+          setState(() => _currentStep = LivenessStep.countingDown);
           _startAutoCaptureCountdown();
         }
         break;
@@ -217,44 +214,76 @@ class _SelfieScreenState extends State<SelfieScreen>
 
     if (!mounted) return;
     setState(() => _currentStep = LivenessStep.completed);
-    await _completeLivenessCheck();
+    await _capturePhoto();
   }
 
-  Future<void> _completeLivenessCheck() async {
+  Future<void> _capturePhoto() async {
     try {
       final XFile image = await _cameraController!.takePicture();
       final File imageFile = File(image.path);
 
       if (!mounted) return;
+      setState(() {
+        _capturedSelfie = imageFile;
+        _isReviewingPhoto = true;
+      });
 
+      final oldController = _cameraController;
+      _cameraController = null;
+      await oldController?.dispose();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to capture photo: $e')));
+        _onRetakePressed();
+      }
+    }
+  }
+
+  void _onRetakePressed() async {
+    setState(() {
+      _capturedSelfie = null;
+      _isReviewingPhoto = false;
+      _isProcessingPhoto = false;
+      _currentStep = LivenessStep.lookStraight;
+      _countdownSeconds = 3;
+      _isInitializing = true;
+    });
+    await _initializeCamera();
+  }
+
+  Future<void> _onContinuePressed() async {
+    if (_capturedSelfie == null) return;
+
+    setState(() {
+      _isReviewingPhoto = false;
+      _isProcessingPhoto = true;
+    });
+
+    try {
       final provider = Provider.of<VerificationProvider>(
         context,
         listen: false,
       );
 
-      final hasFace = await provider.processSelfie(imageFile);
-
+      final hasFace = await provider.processSelfie(_capturedSelfie!);
       if (!mounted) return;
 
       if (!hasFace) {
-        setState(() {
-          _currentStep = LivenessStep.lookStraight;
-          _progressValue = 0.0;
-          _countdownSeconds = 3;
-        });
-        _cameraController?.startImageStream(_processCameraFrame);
+        setState(() => _isProcessingPhoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Face check failed. Please remain inside the oval.'),
+            content: Text('No valid face detected in photo. Please retake.'),
             backgroundColor: Colors.redAccent,
           ),
         );
+        _onRetakePressed();
         return;
       }
 
       setState(() => _isNavigatingAway = true);
-      await _cameraController?.pausePreview().catchError((_) {});
-
+      final submitted = await provider.submitFaceVerification();
       if (!mounted) return;
 
       await Navigator.push(
@@ -262,7 +291,10 @@ class _SelfieScreenState extends State<SelfieScreen>
         MaterialPageRoute(
           builder: (_) => ChangeNotifierProvider.value(
             value: provider,
-            child: const ReviewAllScreen(),
+            child: FaceVerificationResultScreen(
+              success: submitted,
+              onComplete: widget.onComplete,
+            ),
           ),
         ),
       );
@@ -270,18 +302,15 @@ class _SelfieScreenState extends State<SelfieScreen>
       if (mounted) {
         setState(() {
           _isNavigatingAway = false;
-          _currentStep = LivenessStep.lookStraight;
-          _progressValue = 0.0;
-          _countdownSeconds = 3;
+          _isProcessingPhoto = false;
         });
-        await _cameraController?.resumePreview().catchError((_) {});
-        _cameraController?.startImageStream(_processCameraFrame);
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isProcessingPhoto = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Liveness execution error: $e')));
+        ).showSnackBar(SnackBar(content: Text('Face verification error: $e')));
       }
     }
   }
@@ -336,150 +365,153 @@ class _SelfieScreenState extends State<SelfieScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Cancel Button
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(50, 30),
-                  alignment: Alignment.centerLeft,
-                ),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.blueAccent, fontSize: 16),
-                ),
+        child: Stack(
+          children: [
+            // Reusable overlay manages mask cutout and conditional inner view
+            // Replace the entire Center/Stack block in your SelfieScreen build method with this:
+            SelfieCameraOverlay(
+              isAligned: _isInsideOval,
+              isPassed: isCompleted || isCounting,
+              countdownValue: isCounting ? _countdownSeconds : null,
+              isReviewing: _isReviewingPhoto,
+              isProcessing: _isProcessingPhoto,
+              child:
+                  (_isReviewingPhoto || _isProcessingPhoto) &&
+                      _capturedSelfie != null
+                  ? Image.file(_capturedSelfie!, fit: BoxFit.cover)
+                  : (!_isNavigatingAway &&
+                        _cameraController != null &&
+                        _cameraController!.value.isInitialized)
+                  ? OverflowBox(
+                      alignment: Alignment.center,
+                      child: CameraPreview(_cameraController!),
+                    )
+                  : Container(color: Colors.black),
+            ),
+
+            // Foreground Layout Elements
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 12.0,
               ),
-              const Spacer(flex: 1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(50, 30),
+                      alignment: Alignment.centerLeft,
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.blueAccent, fontSize: 16),
+                    ),
+                  ),
+                  const Spacer(),
 
-              // Center Oval Camera Frame & Segmented Ticks / Countdown Overlay
-              Center(
-                child: SizedBox(
-                  width: 280,
-                  height: 350,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Oval Hollow Camera Mask Container
-                      Container(
-                        width: 210,
-                        height: 280,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.rectangle,
-                          borderRadius: BorderRadius.all(
-                            Radius.elliptical(210, 280),
-                          ),
-                        ),
-                        child: ClipOval(
-                          child:
-                              (!_isNavigatingAway &&
-                                  _cameraController != null &&
-                                  _cameraController!.value.isInitialized)
-                              ? OverflowBox(
-                                  alignment: Alignment.center,
-                                  child: CameraPreview(_cameraController!),
-                                )
-                              : Container(color: Colors.black),
-                        ),
+                  // Bottom Status/Instruction Text
+                  Center(
+                    child: Text(
+                      _isReviewingPhoto
+                          ? 'Is this photo okay?\nMake sure your face is clear and visible.'
+                          : (_isProcessingPhoto
+                                ? 'Processing your photo...\nPlease wait while we verify your face.'
+                                : (isCompleted
+                                      ? 'Scan complete.'
+                                      : (isCounting
+                                            ? 'Taking picture in $_countdownSeconds...'
+                                            : (!_isInsideOval
+                                                  ? 'Align face inside the oval (WAIT)'
+                                                  : _getInstructionText())))),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color:
+                            !_isInsideOval &&
+                                !_isReviewingPhoto &&
+                                !_isProcessingPhoto
+                            ? Colors.amberAccent
+                            : Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
 
-                      // Segmented Tick Oval Ring Painter
-                      CustomPaint(
-                        size: const Size(280, 350),
-                        painter: FaceIDOvalTickRingPainter(
-                          progress: _progressValue,
-                          isComplete: isCompleted || isCounting,
-                          isInsideOval: _isInsideOval,
-                        ),
-                      ),
-
-                      // 3, 2, 1 Countdown overlay in the center
-                      if (isCounting)
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$_countdownSeconds',
-                            style: const TextStyle(
-                              color: Colors.greenAccent,
-                              fontSize: 64,
-                              fontWeight: FontWeight.bold,
+                  // Bottom Action Buttons Area
+                  if (_isReviewingPhoto)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: OutlinedButton(
+                              onPressed: _onRetakePressed,
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Colors.blueAccent,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: const Text(
+                                'Retake',
+                                style: TextStyle(
+                                  color: Colors.blueAccent,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const Spacer(flex: 2),
-
-              // Bottom Instruction Text
-              Center(
-                child: Text(
-                  isCompleted
-                      ? 'First Face ID scan complete.'
-                      : (isCounting
-                            ? 'Taking picture in $_countdownSeconds...'
-                            : (!_isInsideOval
-                                  ? 'Align face inside the oval (WAIT)'
-                                  : _getInstructionText())),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: !_isInsideOval ? Colors.amberAccent : Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Bottom Action Area
-              if (isCompleted)
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _completeLivenessCheck,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: _onContinuePressed,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blueAccent,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: const Text(
+                                'Continue',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    const Center(
+                      child: Text(
+                        'Accessibility Options',
+                        style: TextStyle(
+                          color: Colors.blueAccent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                    child: const Text(
-                      'Continue',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                const Center(
-                  child: Text(
-                    'Accessibility Options',
-                    style: TextStyle(
-                      color: Colors.blueAccent,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 20),
-            ],
-          ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -498,64 +530,7 @@ class _SelfieScreenState extends State<SelfieScreen>
       case LivenessStep.countingDown:
         return 'Get ready...';
       case LivenessStep.completed:
-        return 'First Face ID scan complete.';
+        return 'Scan complete.';
     }
-  }
-}
-
-/// Custom painter to draw segmented tick marks along an Oval path
-class FaceIDOvalTickRingPainter extends CustomPainter {
-  final double progress;
-  final bool isComplete;
-  final bool isInsideOval;
-
-  FaceIDOvalTickRingPainter({
-    required this.progress,
-    required this.isComplete,
-    required this.isInsideOval,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    const double radiusX = 110.0;
-    const double radiusY = 145.0;
-    const totalTicks = 60;
-
-    final paint = Paint()
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round;
-
-    for (int i = 0; i < totalTicks; i++) {
-      final double angle = (i * 2 * math.pi / totalTicks) - (math.pi / 2);
-      final double tickProgress = i / totalTicks;
-
-      if (isComplete) {
-        paint.color = Colors.greenAccent;
-      } else if (!isInsideOval) {
-        paint.color = Colors.amber.withOpacity(0.4);
-      } else if (tickProgress <= progress) {
-        paint.color = Colors.greenAccent;
-      } else {
-        paint.color = Colors.grey.withOpacity(0.35);
-      }
-
-      final double cosA = math.cos(angle);
-      final double sinA = math.sin(angle);
-
-      final startX = center.dx + (radiusX - 8) * cosA;
-      final startY = center.dy + (radiusY - 8) * sinA;
-      final endX = center.dx + (radiusX + 2) * cosA;
-      final endY = center.dy + (radiusY + 2) * sinA;
-
-      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant FaceIDOvalTickRingPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.isComplete != isComplete ||
-        oldDelegate.isInsideOval != isInsideOval;
   }
 }

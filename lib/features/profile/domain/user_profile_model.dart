@@ -13,11 +13,8 @@ class UserProfile {
   final String? barangay;
   final String? photoUrl;
 
-  /// 'unverified' | 'pending' | 'approved' | 'rejected'
-  final String verificationStatus;
-
-  /// Admin's review notes — written on both approve & reject.
-  final String? adminNotes;
+  /// Automatic account face verification. Admin review is request-level only.
+  final bool faceVerified;
 
   final bool profileCompleted;
   final DateTime? createdAt;
@@ -35,16 +32,13 @@ class UserProfile {
     this.municipality,
     this.barangay,
     this.photoUrl,
-    this.verificationStatus = 'unverified',
-    this.adminNotes,
+    this.faceVerified = false,
     this.profileCompleted = false,
     this.createdAt,
     this.updatedAt,
   });
 
-  bool get isVerified => verificationStatus == 'approved';
-  bool get isPending => verificationStatus == 'pending';
-  bool get isRejected => verificationStatus == 'rejected';
+  bool get isVerified => faceVerified;
 
   factory UserProfile.fromFirestore(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic field) {
@@ -54,6 +48,11 @@ class UserProfile {
       }
       return null;
     }
+
+    final legacyStatus = (json['verificationStatus'] as String? ?? '')
+        .toLowerCase();
+    final faceVerified =
+        json['faceVerified'] as bool? ?? legacyStatus == 'approved';
 
     return UserProfile(
       uid: json['uid'] as String? ?? '',
@@ -69,8 +68,7 @@ class UserProfile {
       municipality: json['municipality'] as String?,
       barangay: json['barangay'] as String?,
       photoUrl: json['photoUrl'] as String?,
-      verificationStatus: json['verificationStatus'] as String? ?? 'unverified',
-      adminNotes: json['adminNotes'] as String?,
+      faceVerified: faceVerified,
       profileCompleted:
           (json['profileCompleted'] ?? json['isProfileComplete']) as bool? ??
           false,
@@ -92,8 +90,7 @@ class UserProfile {
       if (municipality != null) 'municipality': municipality,
       if (barangay != null) 'barangay': barangay,
       if (photoUrl != null) 'photoUrl': photoUrl,
-      'verificationStatus': verificationStatus,
-      if (adminNotes != null) 'adminNotes': adminNotes,
+      'faceVerified': faceVerified,
       'profileCompleted': profileCompleted,
     };
   }

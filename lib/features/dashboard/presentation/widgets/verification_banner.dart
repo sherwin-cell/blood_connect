@@ -16,14 +16,7 @@ class _VerificationBannerState extends State<VerificationBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final String status = (widget.profile?.verificationStatus ?? '')
-        .toLowerCase();
-
-    // Check if the user is currently pending or under review
-    final bool isPending = status == 'pending' || status == 'under_review';
-
-    // If the user is already under review, don't show the banner at all
-    if (isPending) {
+    if (widget.profile?.faceVerified == true) {
       return const SizedBox.shrink();
     }
 
@@ -52,7 +45,7 @@ class _VerificationBannerState extends State<VerificationBanner> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Verify Account',
+                  'Verify Face',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -77,7 +70,7 @@ class _VerificationBannerState extends State<VerificationBanner> {
               children: [
                 const Expanded(
                   child: Text(
-                    'Get full access to all Blood-Connect services, get verified now!',
+                    'Complete automatic face verification from your profile.',
                     style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
@@ -119,10 +112,10 @@ class _VerificationBannerState extends State<VerificationBanner> {
           children: [
             const Row(
               children: [
-                Icon(Icons.shield_outlined, color: Colors.white, size: 18),
+                Icon(Icons.face_outlined, color: Colors.white, size: 18),
                 SizedBox(width: 8),
                 Text(
-                  'Verify Account for full access',
+                  'Verify your face',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,

@@ -56,7 +56,7 @@ class MemberCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          isVerified ? 'PRC-Verified User' : 'Unverified User',
+                          isVerified ? 'Face Verified' : 'Face not verified',
                           style: TextStyle(
                             color: isVerified ? Colors.white : Colors.white70,
                             fontSize: 12,

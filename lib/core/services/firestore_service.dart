@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../features/profile/domain/user_profile_model.dart';
-import '../../features/verification/domain/entities/verification_data.dart';
+import '../../features/verification/domain/entities/face_verification_data.dart';
+import '../../features/verification/domain/entities/request_id_verification_data.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -72,7 +73,7 @@ class FirestoreService {
         if (fullname != null && fullname.isNotEmpty) 'fullName': fullname,
         'email': email.trim().toLowerCase(),
         'profileCompleted': false,
-        'verificationStatus': 'unverified',
+        'faceVerified': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
       return;
@@ -119,69 +120,193 @@ class FirestoreService {
   }
 
   // ==========================================
-  // IDENTITY VERIFICATION METHODS
+  // FACE VERIFICATION (ACCOUNT)
   // ==========================================
 
-  /// Saves the user's identity verification submission to `/verificationRequests`
-  /// and updates primary user data in `/users/{userId}` with the passed `status`.
-  /// Saves the user's identity verification submission to `/verificationRequests` as a history log
-  /// (without status), and updates primary user data in `/users/{userId}` with the active `status`.
-  Future<void> submitVerificationRecord({
+  /// Stores automatic face-verification results on the user document only.
+  Future<void> saveFaceVerification({
     required String userId,
-    required VerificationData data,
-    required String status, // 'pending' goes to the user profile only
-    required String idCloudinaryUrl,
-    String? backIdCloudinaryUrl,
     required String selfieCloudinaryUrl,
-    double? faceMatchConfidence,
-    bool? faceMatchPassed,
+    required FaceVerificationData data,
   }) async {
-    final batch = _firestore.batch();
     final now = FieldValue.serverTimestamp();
+    final result =
+        data.verificationResult ??
+        (data.hasDetectedFace && (data.faceMatchPassed ?? true)
+            ? 'verified'
+            : 'failed');
+    final verified = result == 'verified';
 
-    final double? confidenceScore =
-        faceMatchConfidence ?? data.faceMatchConfidence;
-    final bool? matchPassed = faceMatchPassed ?? data.faceMatchPassed;
-
-    // 1. Audit Log in /verificationRequests (NO STATUS field stored here anymore)
-    final verificationReqRef = _firestore
-        .collection('verificationRequests')
-        .doc();
-
-    batch.set(verificationReqRef, {
-      'requestId': verificationReqRef.id,
-      'userId': userId,
-      // 'status' is intentionally removed here so it doesn't track status
-      'extractedName': data.extractedName,
-      'extractedBirthDate': data.extractedBirthDate,
-      'extractedGender': data.extractedGender,
-      'idImageUrl': idCloudinaryUrl,
-      'backIdImageUrl': backIdCloudinaryUrl,
+    await _firestore.collection('users').doc(userId).set({
       'selfieImageUrl': selfieCloudinaryUrl,
-      'hasDetectedFace': data.hasDetectedFace,
-      'faceMatchConfidence': confidenceScore,
-      'faceMatchPassed': matchPassed,
-      'verificationProvider': data.verificationProvider ?? 'local_facenet',
-      'submittedAt': now,
-    });
-
-    // 2. Status and profile data live in /users/{userId} (Single Source of Truth for Status)
-    final userRef = _firestore.collection('users').doc(userId);
-    batch.set(userRef, {
-      if (data.extractedName != null) 'fullName': data.extractedName,
-      if (data.extractedBirthDate != null) 'birthDate': data.extractedBirthDate,
-      if (data.extractedGender != null) 'gender': data.extractedGender,
-      'idImageUrl': idCloudinaryUrl,
-      'backIdImageUrl': backIdCloudinaryUrl,
-      'selfieImageUrl': selfieCloudinaryUrl,
-      'faceMatchSimilarity': confidenceScore,
-      'verificationStatus': status, // Status lives here exclusively ('pending')
-      'lastVerificationRequestId': verificationReqRef.id,
+      'faceVerified': verified,
+      // REMOVED: Overriding idVerificationStatus with 'approved' automatically
+      'faceVerification': {
+        'hasDetectedFace': data.hasDetectedFace,
+        'faceMatchConfidence': data.faceMatchConfidence,
+        'faceMatchPassed': data.faceMatchPassed,
+        'verificationProvider': data.verificationProvider ?? 'local_liveness',
+        'verificationResult': result,
+        'selfieImageUrl': selfieCloudinaryUrl,
+        'verifiedAt': now,
+      },
       'updatedAt': now,
-      'resubmittedAt': now,
-      'adminNotes': FieldValue.delete(), // Clears previous rejection feedback
+    }, SetOptions(merge: true));
+  }
+
+  // ==========================================
+  // ID VERIFICATION STATUS & SUBMISSION
+  // ==========================================
+
+  /// Fetches the user's current ID verification status from their user document.
+  /// Checks multiple keys (idVerificationStatus, verificationStatus, and faceVerification)
+  /// to eliminate status drift across client code and cloud functions.
+  Future<String?> getIdVerificationStatus(String userId) async {
+    final doc = await _firestore.collection('users').doc(userId).get();
+    if (!doc.exists) return null;
+
+    final data = doc.data();
+    if (data == null) return null;
+
+    // STRICTLY check only the ID verification status field.
+    // Fallbacks to face verification or general status have been removed
+    // so face checks do not accidentally lock or bypass the ID capture flow.
+    return data['idVerificationStatus'] as String?;
+  }
+
+  /// Creates a new ID verification submission for admin review.
+  ///
+  /// The mobile app must never update the authoritative user verification status.
+  /// A new ID record is created under id_verifications/{submissionId} so rejected
+  /// users can submit again without overwriting the previous submission history.
+  Future<String> saveIdVerificationSubmission({
+    required String userId,
+    required String frontUrl,
+    String? backUrl,
+    required RequestIdVerificationData data,
+  }) async {
+    final now = FieldValue.serverTimestamp();
+    final submissionRef = _firestore.collection('id_verifications').doc(userId);
+
+    await submissionRef.set({
+      'submissionId': submissionRef.id,
+      'userId': userId,
+      'status': 'pending',
+      'idType': data.idType,
+      'frontIdImageUrl': frontUrl,
+      'backIdImageUrl': backUrl,
+      'validationStatus': data.validationStatus,
+      'submittedAt': data.submittedAt?.toIso8601String(),
+      'createdAt': now,
+      'updatedAt': now,
     }, SetOptions(merge: true));
 
-    await batch.commit();
+    return submissionRef.id;
+  }
+
+  Future<Map<String, dynamic>?> getLatestSavedIdSubmissionForUser(
+    String userId,
+  ) async {
+    final snapshot = await _firestore
+        .collection('id_verifications')
+        .where('userId', isEqualTo: userId)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) return null;
+    final doc = snapshot.docs.first;
+    final data = doc.data();
+    data['submissionId'] =
+        doc.id; // This ensures submissionId maps correctly to the random doc ID
+    return data;
+  }
+
+  // ==========================================
+  // REQUEST + ID VERIFICATION
+  // ==========================================
+
+  /// Creates or updates a request document and attaches ID verification to it.
+  Future<String> submitRequestWithId({
+    required String collection,
+    String? documentId,
+    required Map<String, dynamic> requestPayload,
+    required RequestIdVerificationData idData,
+    required String frontIdImageUrl,
+    String? backIdImageUrl,
+    String? idVerificationSubmissionId,
+  }) async {
+    final now = FieldValue.serverTimestamp();
+
+    // Ensure donors collection always uses the userId as the document ID
+    final docId =
+        documentId ??
+        (collection == 'donors' ? requestPayload['userId'] : null);
+
+    final idVerification = {
+      ...idData.toFirestoreMap(
+        frontIdImageUrl: frontIdImageUrl,
+        backIdImageUrl: backIdImageUrl,
+      ),
+      'submittedAt': now,
+    };
+
+    final data = {
+      ...requestPayload,
+      if (idVerificationSubmissionId != null &&
+          idVerificationSubmissionId.isNotEmpty)
+        'idVerificationSubmissionId': idVerificationSubmissionId,
+      'idVerification': idVerification,
+      'status': requestPayload['status'] ?? 'pending',
+      'updatedAt': now,
+    };
+
+    if (docId != null) {
+      await _firestore
+          .collection(collection)
+          .doc(docId)
+          .set(data, SetOptions(merge: true));
+      return docId;
+    }
+
+    data['createdAt'] = now;
+    final ref = await _firestore.collection(collection).add(data);
+    return ref.id;
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getUserBloodRequests(
+    String userId,
+  ) {
+    return _firestore
+        .collection('blood_requests')
+        .where('userId', isEqualTo: userId)
+        .snapshots();
+  }
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserDonorApplication(
+    String userId,
+  ) {
+    return _firestore.collection('donors').doc(userId).snapshots();
+  }
+
+  /// Adds a donor's offer to help a specific blood request subcollection
+  Future<void> offerToDonate({
+    required String requestId,
+    required String donorId,
+    required String donorName,
+    required String donorContact,
+    required String donorBloodType,
+  }) async {
+    await _firestore
+        .collection('blood_requests')
+        .doc(requestId)
+        .collection('offers')
+        .add({
+          'donorId': donorId,
+          'donorName': donorName,
+          'donorContact': donorContact,
+          'donorBloodType': donorBloodType,
+          'status': 'pending',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 }

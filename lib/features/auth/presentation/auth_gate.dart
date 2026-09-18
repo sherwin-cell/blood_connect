@@ -22,6 +22,12 @@ class AuthGate extends StatelessWidget {
 
         final user = snapshot.data;
 
+        debugPrint('========== AUTH DEBUG ==========');
+        debugPrint('Current User: ${user?.uid}');
+        debugPrint('Email: ${user?.email}');
+        debugPrint('Display Name: ${user?.displayName}');
+        debugPrint('================================');
+
         // Unauthenticated → Welcome
         if (user == null) {
           return const WelcomeScreen();

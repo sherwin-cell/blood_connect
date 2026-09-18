@@ -5,7 +5,6 @@ import '../../features/verification/data/repositories/verification_repository_im
 import '../../features/verification/data/services/cloudinary_service.dart';
 import '../../features/verification/data/services/face_detector_service.dart';
 import '../../features/verification/domain/services/i_face_embedding_service.dart';
-import '../../features/verification/data/services/ocr_service.dart';
 import '../../features/verification/data/services/tflite_face_embedding_service.dart';
 
 final sl = GetIt.instance; // sl = Service Locator
@@ -13,7 +12,6 @@ final sl = GetIt.instance; // sl = Service Locator
 Future<void> initServiceLocator() async {
   // 1. External & Core Services
   sl.registerLazySingleton<FirestoreService>(() => FirestoreService());
-  sl.registerLazySingleton<OcrService>(() => OcrService());
   sl.registerLazySingleton<FaceDetectorService>(() => FaceDetectorService());
   sl.registerLazySingleton<CloudinaryService>(() => CloudinaryService());
 
@@ -25,7 +23,6 @@ Future<void> initServiceLocator() async {
   // 3. Verification Repository
   sl.registerLazySingleton<VerificationRepositoryImpl>(
     () => VerificationRepositoryImpl(
-      ocrService: sl<OcrService>(),
       faceDetectorService: sl<FaceDetectorService>(),
       faceEmbeddingService: sl<IFaceEmbeddingService>(),
       cloudinaryService: sl<CloudinaryService>(),

@@ -4,12 +4,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../profile/domain/user_profile_model.dart';
 import '../../profile/presentation/profile_menu_screen.dart';
-import '../../verification/presentation/screens/verification_rejected_screen.dart';
 import 'views/home_tab_view.dart';
 import 'views/activity_tab_view.dart';
 import 'views/history_tab_view.dart';
 import 'widgets/verification_banner.dart';
-import '../../dashboard/presentation/views/chat_list_tab.dart'; // Import the ChatListTab
+import '../../dashboard/presentation/views/chat_list_tab.dart';
 
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
@@ -46,22 +45,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
 
         final profile = snapshot.data;
-        final String status = (profile?.verificationStatus ?? '').toLowerCase();
-        final bool isVerified = profile?.isVerified ?? false;
-
-        // Verification State Flags
-        final bool isRejected = status == 'rejected';
-        final bool isPending = status == 'pending' || status == 'under_review';
-
-        // IF REJECTED: Intercept dashboard view and display rejection screen with admin notes
-        if (isRejected) {
-          final rejectionData = {
-            'adminNotes':
-                profile?.adminNotes ??
-                'No specific notes provided by the administrator.',
-          };
-          return VerificationRejectedScreen(rejectionDetails: rejectionData);
-        }
+        // Fixed: Safely evaluate verification status using the UserProfile model
+        final bool isAccountVerified = profile?.faceVerified ?? false;
 
         return Scaffold(
           backgroundColor: const Color(0xFFF9F9F9),
@@ -77,20 +62,17 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ),
             ),
             actions: [
-              // Top Notification Bell Icon (Stays on top for alerts/notifications)
               IconButton(
                 icon: const Icon(
                   Icons.notifications_none_rounded,
                   color: Colors.black87,
                 ),
                 onPressed: () {
-                  // Optional: Handle top notification bell click actions here
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('No new notifications')),
                   );
                 },
               ),
-              // Profile Avatar Icon: Opens the separate ProfileMenuScreen
               IconButton(
                 icon: const Icon(
                   Icons.account_circle,
@@ -115,13 +97,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 children: [
                   HomeTabView(profile: profile),
                   const ActivityTabView(),
-                  const ChatListTab(), // Serves as your messages list tab
+                  const ChatListTab(),
                   const HistoryTabView(),
                 ],
               ),
 
-              // Only display the banner if the user is unverified and not currently pending
-              if (!isVerified && !isPending)
+              if (!isAccountVerified)
                 Positioned(
                   left: 16,
                   right: 16,
@@ -153,11 +134,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 label: 'Activity',
               ),
               BottomNavigationBarItem(
-                icon: Icon(
-                  Icons.chat_bubble_outline_rounded,
-                ), // Changed bottom icon to chat/messages icon
+                icon: Icon(Icons.chat_bubble_outline_rounded),
                 activeIcon: Icon(Icons.chat_bubble_rounded),
-                label: 'messages', // Bottom bar tab label
+                label: 'messages',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.history),

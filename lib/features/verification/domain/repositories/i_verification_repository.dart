@@ -1,15 +1,12 @@
 import 'dart:io';
-import '../entities/verification_data.dart';
+import '../entities/face_verification_data.dart';
+import '../entities/request_id_verification_data.dart';
 
 abstract class IVerificationRepository {
-  /// Extract name, ID number, birth date, and gender from an ID card image file.
-  /// Values can be null if the OCR scanner could not reliably parse a specific field.
-  Future<Map<String, String?>> processIdOcr(File imageFile);
-
   /// Check if a face exists in the captured selfie file
   Future<bool> detectFace(File imageFile);
 
-  /// Count faces in an image (ID or selfie).
+  /// Count faces in an image (selfie).
   Future<int> countFaces(File imageFile);
 
   /// Crop the primary face from an image for face embedding comparison.
@@ -21,10 +18,33 @@ abstract class IVerificationRepository {
     required File selfieFace,
   });
 
-  /// Upload photos and create a submission record in Firebase
-  Future<void> submitVerification({
+  /// Uploads the selfie and stores automatic face verification on the user account.
+  Future<void> saveFaceVerification({
     required String userId,
-    required VerificationData data,
-    required String status,
+    required FaceVerificationData data,
+  });
+
+  /// Uploads request ID images to Cloudinary. Does not write Firestore.
+  Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
+    required String frontIdPath,
+    String? backIdPath,
+  });
+
+  /// Get the user's current ID verification status ('pending', 'approved', 'rejected', or null)
+  Future<String?> getIdVerificationStatus(String userId);
+
+  /// Save or update the ID verification submission and return the submission ID.
+  Future<String> saveOrUpdateIdSubmission({
+    required String userId,
+    required RequestIdVerificationData data,
+  });
+
+  /// Allows an approved donor to submit an offer to help an active blood request
+  Future<void> offerToDonate({
+    required String requestId,
+    required String donorId,
+    required String donorName,
+    required String donorContact,
+    required String donorBloodType,
   });
 }

@@ -7,8 +7,8 @@ import 'complete_profile_screen.dart';
 import '../../dashboard/presentation/home_dashboard.dart';
 import '../../splash/presentation/splash_screen.dart';
 
-/// Routes authenticated users by Firestore profile completeness only.
-/// ID / face / PRC verification is intentionally not part of this gate.
+/// Routes authenticated users based on Firestore profile completeness.
+/// ID verification is managed via dashboard prompts and action gates (e.g. posting requests).
 class ProfileGate extends StatelessWidget {
   final User user;
   final FirestoreService _firestoreService;
@@ -36,7 +36,7 @@ class ProfileGate extends StatelessWidget {
 
         final profile = profileSnapshot.data;
 
-        // Missing or incomplete profile → Complete Profile
+        // Missing or incomplete profile → Complete Profile Screen
         final isProfileComplete =
             profile != null &&
             (profile.profileCompleted || profile.phoneNumber.trim().isNotEmpty);
@@ -47,7 +47,7 @@ class ProfileGate extends StatelessWidget {
           );
         }
 
-        // Complete profile → Dashboard (no identity verification step)
+        // Complete basic profile → Home Dashboard (where ID verification status drives the banner)
         return const HomeDashboard();
       },
     );

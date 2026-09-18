@@ -6,7 +6,9 @@ import '../provider/verification_provider.dart';
 import '../screens/selfie_screen.dart';
 
 class FaceVerificationInstructionsScreen extends StatelessWidget {
-  const FaceVerificationInstructionsScreen({super.key});
+  final VoidCallback? onComplete;
+
+  const FaceVerificationInstructionsScreen({super.key, this.onComplete});
 
   @override
   Widget build(BuildContext context) {
@@ -122,14 +124,14 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                             final provider = context
                                 .read<VerificationProvider>();
                             Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ChangeNotifierProvider.value(
-                                  value: provider,
-                                  child: const SelfieScreen(),
-                                ),
-                              ),
-                            );
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) => ChangeNotifierProvider.value(
+                                                              value: provider,
+                                                              child: SelfieScreen(onComplete: onComplete),
+                                                            ),
+                                                          ),
+                                                        );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC62828),
