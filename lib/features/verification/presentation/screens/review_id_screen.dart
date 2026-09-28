@@ -9,7 +9,7 @@ import '../provider/request_id_verification_provider.dart';
 class ReviewIdScreen extends StatelessWidget {
   const ReviewIdScreen({super.key});
 
-  void _confirm(BuildContext context) {
+  Future<void> _confirm(BuildContext context) async {
     final provider = context.read<RequestIdVerificationProvider>();
 
     if (!provider.data.isComplete) {
@@ -23,12 +23,29 @@ class ReviewIdScreen extends StatelessWidget {
       return;
     }
 
-    IdVerificationFlow.complete(context, provider.confirm());
+    // Call confirmAndSubmit() instead of confirm() to write to database via repository
+    final bool success = await provider.confirmAndSubmit();
+
+    if (!context.mounted) return;
+
+    if (success) {
+      IdVerificationFlow.complete(context, provider.data);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.errorMessage ?? 'Failed to submit ID. Please try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = context.watch<RequestIdVerificationProvider>().data;
+    final provider = context.watch<RequestIdVerificationProvider>();
+    final data = provider.data;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -61,12 +78,14 @@ class ReviewIdScreen extends StatelessWidget {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: () => _confirm(context),
+                onPressed: provider.isLoading ? null : () => _confirm(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryRed,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Confirm ID'),
+                child: provider.isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Confirm ID'),
               ),
             ),
           ],

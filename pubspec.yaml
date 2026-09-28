@@ -53,6 +53,9 @@ dependencies:
   path: ^1.9.1
   get_it: ^7.6.0
   tflite_flutter: ^0.12.1
+  image_picker: ^1.2.3
+  google_fonts: ^8.2.1
+  table_calendar: ^3.2.1
 
 dev_dependencies:
   flutter_test:

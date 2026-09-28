@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/auth_gate.dart';
-import '../../verification/presentation/screens/identity_verification_info_screen.dart';
+
+// TODO: Import your Help & Guides screen if you have one, or create a placeholder view
+// import '../../help/presentation/help_guides_screen.dart';
 
 class ProfileMenuScreen extends StatelessWidget {
   const ProfileMenuScreen({super.key});
@@ -69,16 +71,13 @@ class ProfileMenuScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         children: [
           ListTile(
-            leading: const Icon(Icons.face_retouching_natural),
-            title: const Text('Face Verification'),
-            subtitle: const Text('Verify your face automatically'),
+            leading: const Icon(Icons.menu_book_outlined),
+            title: const Text('Help & Guides'),
+            subtitle: const Text('FAQs and app usage guides'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const IdentityVerificationInfoScreen(),
-                ),
-              );
+              // TODO: Navigate to your Help & Guides screen when ready
+              // Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpGuidesScreen()));
             },
           ),
           const Divider(),

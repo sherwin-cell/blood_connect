@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart';
 
 class RequestOffersScreen extends StatelessWidget {
   final String requestId;
@@ -87,7 +86,6 @@ class RequestOffersScreen extends StatelessWidget {
               final donorName = offerData['donorName'] ?? 'Anonymous Donor';
               final donorBloodType = offerData['donorBloodType'] ?? 'N/A';
               final donorContact = offerData['donorContact'] ?? 'N/A';
-              final donorId = offerData['donorId'] ?? '';
               final status = offerData['status'] ?? 'pending';
 
               return Container(
@@ -173,26 +171,6 @@ class RequestOffersScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              // Open chat with donor
-                              final currentUserId = FirebaseFirestore
-                                  .instance
-                                  .app
-                                  .options
-                                  .hashCode; // or FirebaseAuth
-                              // Standard chat pairing logic here
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryRed,
-                            ),
-                            child: const Text(
-                              'Chat',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ],

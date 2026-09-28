@@ -5,9 +5,6 @@ import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/firestore_service.dart';
 import '../../../verification/domain/entities/request_id_verification_data.dart';
-import '../../../verification/domain/repositories/i_verification_repository.dart';
-import '../../../verification/presentation/id_verification_flow.dart';
-import '../../../verification/presentation/widgets/request_id_summary_card.dart';
 
 class PostRequestStep4Screen extends StatefulWidget {
   final String patientName;
@@ -50,54 +47,42 @@ class PostRequestStep4Screen extends StatefulWidget {
 class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
   bool _isSubmitting = false;
   bool _isLoadingStatus = true;
-  String? _userVerificationStatus;
-  String? _rejectionReason;
-  RequestIdVerificationData? _idVerification;
   String? _savedIdSubmissionId;
+  String? _frontIdImageUrl;
+  String? _backIdImageUrl;
+  String? _idType;
+  String? _validationStatus;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedIdSubmission();
+    _loadAttachedIdSubmission();
   }
 
-  Future<void> _loadSavedIdSubmission() async {
+  /// Automatically fetch the user's latest submitted ID evidence to attach to this request
+  Future<void> _loadAttachedIdSubmission() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        return;
-      }
+      if (user == null) return;
 
-      // Read context providers BEFORE any async gaps
       final firestoreService = context.read<FirestoreService>();
-
-      // Directly fetch user doc map to check idVerificationStatus safely
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      // Guard against async gap
-      if (!mounted) return;
-
-      final userData = userDoc.data();
-      String? profileStatus = userData?['idVerificationStatus'] as String?;
-
       final savedId = await firestoreService.getLatestSavedIdSubmissionForUser(
         user.uid,
       );
 
-      // Guard against second async gap
       if (!mounted) return;
 
-      setState(() {
-        _savedIdSubmissionId = savedId?['submissionId'] as String?;
-        _userVerificationStatus =
-            profileStatus ?? (savedId?['status'] as String?);
-        _rejectionReason = savedId?['rejectionReason'] as String?;
-      });
+      if (savedId != null) {
+        setState(() {
+          _savedIdSubmissionId = savedId['submissionId'] as String?;
+          _frontIdImageUrl = savedId['frontIdImageUrl'] as String?;
+          _backIdImageUrl = savedId['backIdImageUrl'] as String?;
+          _idType = savedId['idType'] as String?;
+          _validationStatus = savedId['validationStatus'] as String?;
+        });
+      }
     } catch (e) {
-      debugPrint('Error loading saved ID submission: $e');
+      debugPrint('Error loading attached ID submission: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoadingStatus = false);
@@ -105,7 +90,6 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
     }
   }
 
-  // Check if the user already has an active blood request
   Future<bool> _hasActiveBloodRequest(String userId) async {
     try {
       final querySnapshot = await FirebaseFirestore.instance
@@ -114,8 +98,8 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
           .get();
 
       for (var doc in querySnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>?;
-        final status = data?['status']?.toString().toLowerCase();
+        final data = doc.data();
+        final status = data['status']?.toString().toLowerCase();
         if (status == 'active' || status == 'pending') {
           return true;
         }
@@ -126,26 +110,6 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
     return false;
   }
 
-  Future<void> _captureValidId() async {
-    if (_userVerificationStatus == 'pending') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Your ID verification is currently pending admin review.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    final result = await IdVerificationFlow.start(context);
-    if (!mounted) return;
-    if (result != null && result.isComplete) {
-      setState(() => _idVerification = result);
-    }
-  }
-
   Future<void> _submitRequest() async {
     if (_isSubmitting) return;
 
@@ -153,6 +117,18 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('User session not found. Please log in.')),
+      );
+      return;
+    }
+
+    if (_savedIdSubmissionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No submitted ID found. Please complete ID submission first.',
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -174,53 +150,15 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
         return;
       }
 
-      final bool isApproved = RequestIdVerificationData.isApprovedStatus(
-        _userVerificationStatus,
-      );
-      final bool hasSavedReusableId =
-          _savedIdSubmissionId != null && isApproved;
-      final bool needsIdCapture = !hasSavedReusableId;
-
-      final repository = context.read<IVerificationRepository>();
       final firestoreService = context.read<FirestoreService>();
 
-      String? frontUrl;
-      String? backUrl;
-      String? submissionId = _savedIdSubmissionId;
-      RequestIdVerificationData? finalIdData = _idVerification;
+      // Construct ID verification payload entity using the already submitted data
+      final idData = RequestIdVerificationData(
+        idType: _idType ?? 'Government ID',
+        validationStatus: _validationStatus ?? 'valid',
+      );
 
-      if (needsIdCapture && _idVerification != null) {
-        final uploaded = await repository.uploadRequestIdImages(
-          frontIdPath: _idVerification!.frontIdImage!,
-          backIdPath: _idVerification!.backIdImage,
-        );
-        frontUrl = uploaded.frontUrl;
-        backUrl = uploaded.backUrl;
-
-        submissionId = await repository.saveOrUpdateIdSubmission(
-          userId: user.uid,
-          data: _idVerification!,
-        );
-      } else if (!needsIdCapture && submissionId != null) {
-        // Fetch the existing saved ID document data to attach to this blood request
-        final existingIdDoc = await FirebaseFirestore.instance
-            .collection('id_verifications')
-            .doc(submissionId)
-            .get();
-
-        if (existingIdDoc.exists) {
-          final data = existingIdDoc.data()!;
-          frontUrl = data['frontIdImageUrl'] as String?;
-          backUrl = data['backIdImageUrl'] as String?;
-
-          // Reconstruct RequestIdVerificationData from the saved record
-          finalIdData = RequestIdVerificationData(
-            idType: data['idType'] ?? 'Government ID',
-            validationStatus: data['validationStatus'] ?? 'valid',
-          );
-        }
-      }
-
+      // Submit request attached with the user's existing submitted ID info for PRC Admin Review
       await firestoreService.submitRequestWithId(
         collection: 'blood_requests',
         requestPayload: {
@@ -243,20 +181,22 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
           'hospital': widget.hospitalName,
           'contactPerson': widget.contactPerson,
           'contactNumber': widget.contactNumber,
-          'status': 'pending',
+          'status': 'pending', // Sent directly to PRC Admin review queue
           'createdAt': FieldValue.serverTimestamp(),
         },
-        idData: finalIdData ?? const RequestIdVerificationData(),
-        frontIdImageUrl: frontUrl ?? '',
-        backIdImageUrl: backUrl ?? '',
-        idVerificationSubmissionId: submissionId,
+        idData: idData,
+        frontIdImageUrl: _frontIdImageUrl ?? '',
+        backIdImageUrl: _backIdImageUrl,
+        idVerificationSubmissionId: _savedIdSubmissionId,
       );
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Blood request posted successfully.'),
+          content: Text(
+            'Blood request posted successfully and sent for PRC admin review.',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -280,13 +220,6 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
     String formattedDate =
         '${widget.neededByDate.month}/${widget.neededByDate.day}/${widget.neededByDate.year}';
 
-    final bool isApproved = RequestIdVerificationData.isApprovedStatus(
-      _userVerificationStatus,
-    );
-    final bool isPending = _userVerificationStatus == 'pending';
-    final bool isRejected = _userVerificationStatus == 'rejected';
-    final bool canBypassId = isApproved && _savedIdSubmissionId != null;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -296,9 +229,6 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
         ),
         backgroundColor: AppColors.primaryRed,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
       ),
       body: _isLoadingStatus
           ? const Center(child: CircularProgressIndicator())
@@ -307,6 +237,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Step indicator
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: const [
@@ -347,6 +278,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Info header card
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -376,7 +308,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                'Please review your information before submitting your blood request.',
+                                'Please review your information. Your submitted ID will be attached automatically for PRC admin review.',
                                 style: TextStyle(
                                   color: Colors.black54,
                                   fontSize: 11,
@@ -400,6 +332,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
                   ),
                   const SizedBox(height: 8),
 
+                  // Summary Details Card
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -489,184 +422,53 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
                   ),
                   const SizedBox(height: 20),
 
-                  if (canBypassId) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 24,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '✓ Identity already verified',
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                  // Attached ID status indicator badge
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '✓ Submitted ID Attached',
+                                style: TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Your approved identity verification will be used for this blood request.',
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontSize: 11,
-                                  ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _idType != null
+                                    ? 'Using your submitted $_idType record for admin review.'
+                                    : 'Your submitted ID will be attached to this request.',
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 11,
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (isPending) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.hourglass_empty,
-                            color: Colors.orange,
-                            size: 24,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Your ID verification is currently pending admin review.',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (isRejected) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.red,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _rejectionReason != null &&
-                                      _rejectionReason!.trim().isNotEmpty
-                                  ? 'Previous ID submission rejected: $_rejectionReason'
-                                  : 'Your previous ID verification was rejected. Please resubmit your ID before posting a blood request.',
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: OutlinedButton.icon(
-                        onPressed: _isSubmitting ? null : _captureValidId,
-                        icon: const Icon(
-                          Icons.badge_outlined,
-                          color: AppColors.primaryRed,
-                        ),
-                        label: const Text(
-                          'Resubmit Government ID',
-                          style: TextStyle(
-                            color: AppColors.primaryRed,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            ],
                           ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.primaryRed),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-                  ] else ...[
-                    const Text(
-                      'Identity Verification *',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'To protect patients and prevent fraudulent requests, please verify your identity.',
-                      style: TextStyle(color: Colors.grey, fontSize: 11),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_idVerification != null)
-                      RequestIdSummaryCard(
-                        data: _idVerification!,
-                        onRecapture: _captureValidId,
-                      )
-                    else
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : _captureValidId,
-                          icon: const Icon(
-                            Icons.badge_outlined,
-                            color: AppColors.primaryRed,
-                          ),
-                          label: const Text(
-                            'Capture Government ID for Verification',
-                            style: TextStyle(
-                              color: AppColors.primaryRed,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primaryRed),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
                   const SizedBox(height: 24),
 
+                  // Action Buttons
                   Row(
                     children: [
                       Expanded(
@@ -694,9 +496,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
                         flex: 2,
                         child: ElevatedButton(
                           onPressed:
-                              (_isSubmitting ||
-                                  isPending ||
-                                  (!canBypassId && _idVerification == null))
+                              (_isSubmitting || _savedIdSubmissionId == null)
                               ? null
                               : _submitRequest,
                           style: ElevatedButton.styleFrom(

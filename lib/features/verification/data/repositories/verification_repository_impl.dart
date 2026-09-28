@@ -96,6 +96,14 @@ class VerificationRepositoryImpl implements IVerificationRepository {
     );
   }
 
+  // ==========================================
+  // NEW: Get Face Verification status check
+  // ==========================================
+  @override
+  Future<bool> getFaceVerificationStatus(String userId) async {
+    return await firestoreService.getFaceVerificationStatus(userId);
+  }
+
   @override
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
     required String frontIdPath,

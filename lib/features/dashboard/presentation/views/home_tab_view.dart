@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../profile/domain/user_profile_model.dart';
@@ -5,12 +7,127 @@ import '../../../blood_request/presentation/screens/post_blood_request_welcome_s
 import '../../../blood_request/presentation/screens/donor_request_feed_screen.dart';
 import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
 import '../../../donor/presentation/screens/matched_donors_screen.dart';
+import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
+import '../../../announcements/presentation/screens/announcements_screen.dart';
+import '../../../verification/presentation/id_verification_flow.dart';
 import '../widgets/member_card.dart';
 
 class HomeTabView extends StatelessWidget {
   final UserProfile? profile;
 
   const HomeTabView({super.key, required this.profile});
+
+  /// Gated check for Apply for Blood Request & Donor Application
+  Future<void> _checkVerificationAndNavigate(
+    BuildContext context, {
+    required Widget destinationScreen,
+    required String actionName,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to continue.')),
+      );
+      return;
+    }
+
+    // 1. Check Face Verification Prerequisite
+    final bool isFaceVerified = profile?.faceVerified ?? false;
+    if (!isFaceVerified) {
+      _showGateDialog(
+        context,
+        title: 'Face Verification Required',
+        message:
+            'You must complete Face Verification before you can $actionName.',
+        buttonText: 'Complete Face Verification',
+        onPressed: () {
+          Navigator.pop(context);
+        },
+      );
+      return;
+    }
+
+    // 2. Check ID Submission Prerequisite safely with error suppression
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    bool hasSubmittedId = false;
+
+    try {
+      final docSnap = await FirebaseFirestore.instance
+          .collection('id_verifications')
+          .doc(user.uid)
+          .get(GetOptions(source: Source.serverAndCache));
+
+      hasSubmittedId = docSnap.exists && docSnap.data() != null;
+    } catch (e) {
+      hasSubmittedId = false;
+    }
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // Dismiss loading dialog
+
+    if (!hasSubmittedId) {
+      _showGateDialog(
+        context,
+        title: 'ID Submission Required',
+        message:
+            'You must submit a valid government ID before you can $actionName.',
+        buttonText: 'Submit Valid ID',
+        onPressed: () async {
+          Navigator.pop(context);
+          await IdVerificationFlow.start(context);
+        },
+      );
+      return;
+    }
+
+    // 3. All checks passed! Proceed to destination
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => destinationScreen));
+  }
+
+  void _showGateDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String buttonText,
+    required VoidCallback onPressed,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.primaryRed,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryRed,
+            ),
+            child: Text(
+              buttonText,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +153,7 @@ class HomeTabView extends StatelessWidget {
           const SizedBox(height: 24),
           _buildSectionHeader('Information & Services'),
           const SizedBox(height: 12),
-          _buildInfoServicesGrid(),
+          _buildInfoServicesGrid(context),
         ],
       ),
     );
@@ -59,18 +176,18 @@ class HomeTabView extends StatelessWidget {
         Expanded(
           child: _buildActionCard(
             title: 'Need Blood?',
-            subtitle: 'Post a blood request.',
-            buttonText: 'Post Blood Request',
+            subtitle: 'Apply for a blood request.',
+            buttonText: 'Apply for Blood Request',
             icon: Icons.water_drop_outlined,
             iconBgColor: Colors.red.shade50,
             iconColor: Colors.red.shade400,
             buttonColor: Colors.red.shade50,
             buttonTextColor: AppColors.primaryRed,
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const PostBloodRequestWelcomeScreen(),
-                ),
+              _checkVerificationAndNavigate(
+                context,
+                destinationScreen: const PostBloodRequestWelcomeScreen(),
+                actionName: 'Aplly for a blood request',
               );
             },
           ),
@@ -87,10 +204,10 @@ class HomeTabView extends StatelessWidget {
             buttonColor: Colors.green.shade50,
             buttonTextColor: Colors.green.shade700,
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ApplyDonorWelcomeScreen(),
-                ),
+              _checkVerificationAndNavigate(
+                context,
+                destinationScreen: const ApplyDonorWelcomeScreen(),
+                actionName: 'apply as a blood donor',
               );
             },
           ),
@@ -274,42 +391,95 @@ class HomeTabView extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoServicesGrid() {
+  Widget _buildInfoServicesGrid(BuildContext context) {
     return Row(
       children: [
-        _buildInfoServiceItem(Icons.chat_bubble_outline, 'Chat with PRC'),
-        const SizedBox(width: 8),
-        _buildInfoServiceItem(Icons.menu_book_outlined, 'Help & Guides'),
-        const SizedBox(width: 8),
-        _buildInfoServiceItem(Icons.campaign_outlined, 'Announcements'),
+        _buildInfoServiceItem(
+          Icons.chat_bubble_outline,
+          'Chat with PRC',
+          onTap: () async {
+            final user = FirebaseAuth.instance.currentUser;
+            if (user == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please log in to chat with PRC support.'),
+                ),
+              );
+              return;
+            }
+
+            final prcChatId = '${user.uid}_prc_support';
+
+            await FirebaseFirestore.instance
+                .collection('chats')
+                .doc(prcChatId)
+                .set({
+                  'chatId': prcChatId,
+                  'participants': [user.uid, 'prc_support_admin'],
+                  'participantNames': {
+                    user.uid: user.displayName ?? 'User',
+                    'prc_support_admin': 'PRC Support',
+                  },
+                  'lastMessageTime': FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true));
+
+            if (!context.mounted) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PrcChatRoomScreen(
+                  chatId: prcChatId,
+                  otherUserName: 'PRC Support',
+                ),
+              ),
+            );
+          },
+        ),
         const SizedBox(width: 8),
         _buildInfoServiceItem(
-          Icons.person_add_alt_1_outlined,
-          'Refer a Friend',
+          Icons.campaign_outlined,
+          'Announcements',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+            );
+          },
         ),
       ],
     );
   }
 
-  Widget _buildInfoServiceItem(IconData icon, String label) {
+  Widget _buildInfoServiceItem(
+    IconData icon,
+    String label, {
+    VoidCallback? onTap,
+  }) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: AppColors.primaryRed, size: 22),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
-            ),
-          ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: AppColors.primaryRed, size: 22),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

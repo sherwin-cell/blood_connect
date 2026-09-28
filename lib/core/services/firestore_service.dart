@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../features/profile/domain/user_profile_model.dart';
 import '../../features/verification/domain/entities/face_verification_data.dart';
 import '../../features/verification/domain/entities/request_id_verification_data.dart';
@@ -123,6 +124,15 @@ class FirestoreService {
   // FACE VERIFICATION (ACCOUNT)
   // ==========================================
 
+  /// Fetches whether the user's face has been verified.
+  Future<bool> getFaceVerificationStatus(String userId) async {
+    final doc = await _firestore.collection('users').doc(userId).get();
+    if (!doc.exists) return false;
+    final data = doc.data();
+    if (data == null) return false;
+    return data['faceVerified'] as bool? ?? false;
+  }
+
   /// Stores automatic face-verification results on the user document only.
   Future<void> saveFaceVerification({
     required String userId,
@@ -140,7 +150,6 @@ class FirestoreService {
     await _firestore.collection('users').doc(userId).set({
       'selfieImageUrl': selfieCloudinaryUrl,
       'faceVerified': verified,
-      // REMOVED: Overriding idVerificationStatus with 'approved' automatically
       'faceVerification': {
         'hasDetectedFace': data.hasDetectedFace,
         'faceMatchConfidence': data.faceMatchConfidence,
@@ -159,26 +168,35 @@ class FirestoreService {
   // ==========================================
 
   /// Fetches the user's current ID verification status from their user document.
-  /// Checks multiple keys (idVerificationStatus, verificationStatus, and faceVerification)
-  /// to eliminate status drift across client code and cloud functions.
   Future<String?> getIdVerificationStatus(String userId) async {
-    final doc = await _firestore.collection('users').doc(userId).get();
-    if (!doc.exists) return null;
+    try {
+      // 1. First, verify that an actual submission document exists in id_verifications
+      final idSubmissionDoc = await _firestore
+          .collection('id_verifications')
+          .doc(userId)
+          .get();
 
-    final data = doc.data();
-    if (data == null) return null;
+      if (!idSubmissionDoc.exists || idSubmissionDoc.data() == null) {
+        // No submission record exists, so the account cannot be verified/approved.
+        return null;
+      }
 
-    // STRICTLY check only the ID verification status field.
-    // Fallbacks to face verification or general status have been removed
-    // so face checks do not accidentally lock or bypass the ID capture flow.
-    return data['idVerificationStatus'] as String?;
+      // 2. If the submission exists, check the status on the user profile (or the submission itself)
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) return null;
+
+      final data = userDoc.data();
+      if (data == null) return null;
+
+      return data['idVerificationStatus'] as String?;
+    } catch (e) {
+      debugPrint('Error checking ID verification status: $e');
+      return null;
+    }
   }
 
   /// Creates a new ID verification submission for admin review.
-  ///
-  /// The mobile app must never update the authoritative user verification status.
-  /// A new ID record is created under id_verifications/{submissionId} so rejected
-  /// users can submit again without overwriting the previous submission history.
+  /// Creates a new ID verification submission and instantly approves it (since there is no admin app).
   Future<String> saveIdVerificationSubmission({
     required String userId,
     required String frontUrl,
@@ -188,10 +206,11 @@ class FirestoreService {
     final now = FieldValue.serverTimestamp();
     final submissionRef = _firestore.collection('id_verifications').doc(userId);
 
+    // 1. Save submission data with 'approved' status
     await submissionRef.set({
       'submissionId': submissionRef.id,
       'userId': userId,
-      'status': 'pending',
+      'status': 'approved', // Changed from 'pending' to 'approved'
       'idType': data.idType,
       'frontIdImageUrl': frontUrl,
       'backIdImageUrl': backUrl,
@@ -201,24 +220,38 @@ class FirestoreService {
       'updatedAt': now,
     }, SetOptions(merge: true));
 
+    // 2. Update the user document so getIdVerificationStatus reads 'approved' immediately
+    await _firestore.collection('users').doc(userId).set({
+      'idVerificationStatus': 'approved',
+      'isVerified': true,
+      'updatedAt': now,
+    }, SetOptions(merge: true));
+
     return submissionRef.id;
   }
 
+  /// FIXED: Fetches the latest ID submission cleanly by direct document reference
+  /// to avoid collection-level query permission errors when no document exists.
   Future<Map<String, dynamic>?> getLatestSavedIdSubmissionForUser(
     String userId,
   ) async {
-    final snapshot = await _firestore
-        .collection('id_verifications')
-        .where('userId', isEqualTo: userId)
-        .limit(1)
-        .get();
+    try {
+      final docRef = _firestore.collection('id_verifications').doc(userId);
+      final docSnap = await docRef.get();
 
-    if (snapshot.docs.isEmpty) return null;
-    final doc = snapshot.docs.first;
-    final data = doc.data();
-    data['submissionId'] =
-        doc.id; // This ensures submissionId maps correctly to the random doc ID
-    return data;
+      if (!docSnap.exists || docSnap.data() == null) {
+        return null;
+      }
+
+      final data = docSnap.data()!;
+      data['submissionId'] = docSnap.id;
+      return data;
+    } catch (e) {
+      debugPrint(
+        'Safe ID lookup caught exception (expected if unsubmitted): $e',
+      );
+      return null;
+    }
   }
 
   // ==========================================
@@ -237,7 +270,6 @@ class FirestoreService {
   }) async {
     final now = FieldValue.serverTimestamp();
 
-    // Ensure donors collection always uses the userId as the document ID
     final docId =
         documentId ??
         (collection == 'donors' ? requestPayload['userId'] : null);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../profile/domain/user_profile_model.dart';
@@ -8,7 +9,6 @@ import 'views/home_tab_view.dart';
 import 'views/activity_tab_view.dart';
 import 'views/history_tab_view.dart';
 import 'widgets/verification_banner.dart';
-import '../../dashboard/presentation/views/chat_list_tab.dart';
 
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
@@ -45,7 +45,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
 
         final profile = snapshot.data;
-        // Fixed: Safely evaluate verification status using the UserProfile model
         final bool isAccountVerified = profile?.faceVerified ?? false;
 
         return Scaffold(
@@ -73,16 +72,44 @@ class _HomeDashboardState extends State<HomeDashboard> {
                   );
                 },
               ),
-              IconButton(
-                icon: const Icon(
-                  Icons.account_circle,
-                  color: Colors.black38,
-                  size: 28,
-                ),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => ProfileMenuScreen(),
+              // Stream raw user document snapshot to safely extract selfieImageUrl from faceVerification map
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .snapshots(),
+                builder: (context, docSnapshot) {
+                  final data = docSnapshot.data?.data();
+                  final faceVerificationMap =
+                      data?['faceVerification'] as Map<String, dynamic>?;
+                  final String? selfieUrl =
+                      faceVerificationMap?['selfieImageUrl']; //[cite: 4]
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const ProfileMenuScreen(),
+                          ),
+                        );
+                      },
+                      child: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage:
+                            (selfieUrl != null && selfieUrl.isNotEmpty)
+                            ? NetworkImage(selfieUrl)
+                            : null,
+                        child: (selfieUrl == null || selfieUrl.isEmpty)
+                            ? const Icon(
+                                Icons.account_circle,
+                                color: Colors.black38,
+                                size: 28,
+                              )
+                            : null,
+                      ),
                     ),
                   );
                 },
@@ -97,7 +124,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 children: [
                   HomeTabView(profile: profile),
                   const ActivityTabView(),
-                  const ChatListTab(),
                   const HistoryTabView(),
                 ],
               ),
@@ -132,11 +158,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 icon: Icon(Icons.assignment_outlined),
                 activeIcon: Icon(Icons.assignment),
                 label: 'Activity',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.chat_bubble_outline_rounded),
-                activeIcon: Icon(Icons.chat_bubble_rounded),
-                label: 'messages',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.history),

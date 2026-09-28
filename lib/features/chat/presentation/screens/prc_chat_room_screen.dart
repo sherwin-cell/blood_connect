@@ -1,25 +1,41 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 
-class ChatRoomScreen extends StatefulWidget {
-  final String chatId; // Unique chat document ID
-  final String otherUserName; // Name of the person you're talking to
+class PrcChatRoomScreen extends StatefulWidget {
+  final String chatId;
+  final String otherUserName;
 
-  const ChatRoomScreen({
+  const PrcChatRoomScreen({
     super.key,
     required this.chatId,
-    required this.otherUserName,
+    this.otherUserName = 'PRC Support',
   });
 
   @override
-  State<ChatRoomScreen> createState() => _ChatRoomScreenState();
+  State<PrcChatRoomScreen> createState() => _PrcChatRoomScreenState();
 }
 
-class _ChatRoomScreenState extends State<ChatRoomScreen> {
+class _PrcChatRoomScreenState extends State<PrcChatRoomScreen> {
   final TextEditingController _messageController = TextEditingController();
   final User? currentUser = FirebaseAuth.instance.currentUser;
+
+  bool _isInitialized = false;
+
+  // List of predicted quick-action questions
+  final List<String> _predictedQuestions = [
+    'How do I renew my PRC license?',
+    'How to register on LERIS?',
+    'What are the exam requirements?',
+    'How to replace a lost PRC ID?',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndSendInitialGreeting();
+  }
 
   @override
   void dispose() {
@@ -27,14 +43,63 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.dispose();
   }
 
-  Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
-    if (text.isEmpty || currentUser == null) return;
-
-    _messageController.clear();
+  /// Automatically sends the initial greeting message if the chat is completely new/empty
+  Future<void> _checkAndSendInitialGreeting() async {
+    if (currentUser == null || _isInitialized) return;
 
     try {
-      // Add message to subcollection 'messages' inside the chat document
+      final messagesRef = FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .collection('messages');
+
+      final snapshot = await messagesRef.limit(1).get();
+
+      if (snapshot.docs.isEmpty && !_isInitialized) {
+        _isInitialized = true;
+        final userName = currentUser!.displayName ?? 'User';
+        final welcomeMessage = 'Hi $userName, what can we help you today?';
+
+        // 1. Add welcome message from support admin
+        await messagesRef.add({
+          'senderId': 'prc_support_admin',
+          'message': welcomeMessage,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        // 2. Update chat metadata preview document
+        await FirebaseFirestore.instance
+            .collection('chats')
+            .doc(widget.chatId)
+            .set({
+              'chatId': widget.chatId,
+              'lastMessage': 'Admin: $welcomeMessage',
+              'lastMessageTime': FieldValue.serverTimestamp(),
+              'userId': currentUser!.uid,
+              'userName': userName,
+              'isPrcSupport': true,
+              'participants': [currentUser!.uid, 'prc_support_admin'],
+              'participantNames': {
+                currentUser!.uid: userName,
+                'prc_support_admin': 'PRC Support',
+              },
+            }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint('Error sending initial chat greeting: $e');
+    }
+  }
+
+  Future<void> _sendMessage([String? presetText]) async {
+    final text = presetText ?? _messageController.text.trim();
+    if (text.isEmpty || currentUser == null) return;
+
+    if (presetText == null) {
+      _messageController.clear();
+    }
+
+    try {
+      // 1. Add user message to subcollection 'messages'
       await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
@@ -45,13 +110,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             'createdAt': FieldValue.serverTimestamp(),
           });
 
-      // Update the chat document with the last message preview for chat lists
+      // 2. Update the chat document preview for admin lists
       await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
           .set({
+            'chatId': widget.chatId,
             'lastMessage': text,
             'lastMessageTime': FieldValue.serverTimestamp(),
+            'userId': currentUser!.uid,
+            'userName': currentUser!.displayName ?? 'Anonymous User',
+            'isPrcSupport': true,
+            'participants': [currentUser!.uid, 'prc_support_admin'],
+            'participantNames': {
+              currentUser!.uid: currentUser!.displayName ?? 'User',
+              'prc_support_admin': 'PRC Support',
+            },
           }, SetOptions(merge: true));
     } catch (e) {
       if (!mounted) return;
@@ -107,16 +181,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
                 final docs = snapshot.data?.docs ?? [];
 
-                if (docs.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No messages yet. Coordinate your donation details here!',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                }
-
                 return ListView.builder(
                   reverse: true, // Show newest messages at the bottom
                   padding: const EdgeInsets.all(16),
@@ -126,6 +190,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     final senderId = data['senderId'] ?? '';
                     final message = data['message'] ?? '';
                     final isMe = senderId == currentUser?.uid;
+                    final bool isBotOrAdmin =
+                        senderId == 'prc_support_admin' ||
+                        senderId == 'prc_bot_support';
 
                     return Align(
                       alignment: isMe
@@ -141,7 +208,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                           maxWidth: MediaQuery.of(context).size.width * 0.75,
                         ),
                         decoration: BoxDecoration(
-                          color: isMe ? AppColors.primaryRed : Colors.white,
+                          color: isMe
+                              ? AppColors.primaryRed
+                              : (isBotOrAdmin
+                                    ? Colors.grey.shade200
+                                    : Colors.white),
                           borderRadius: BorderRadius.circular(16).copyWith(
                             bottomRight: isMe
                                 ? const Radius.circular(0)
@@ -173,6 +244,32 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             ),
           ),
 
+          // Quick-Action Predicted Questions Bar (Shows above text input)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Colors.white,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _predictedQuestions.map((question) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ActionChip(
+                      label: Text(question),
+                      backgroundColor: Colors.red.shade50,
+                      labelStyle: const TextStyle(
+                        color: AppColors.primaryRed,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      onPressed: () => _sendMessage(question),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+
           // Message Input Bar
           Container(
             padding: const EdgeInsets.all(12),
@@ -183,7 +280,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   child: TextField(
                     controller: _messageController,
                     decoration: InputDecoration(
-                      hintText: 'Type a message...',
+                      hintText: 'Type your message or follow-up...',
                       filled: true,
                       fillColor: Colors.grey.shade100,
                       contentPadding: const EdgeInsets.symmetric(
@@ -207,7 +304,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       color: Colors.white,
                       size: 18,
                     ),
-                    onPressed: _sendMessage,
+                    onPressed: () => _sendMessage(),
                   ),
                 ),
               ],

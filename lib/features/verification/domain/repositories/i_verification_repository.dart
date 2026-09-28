@@ -24,6 +24,12 @@ abstract class IVerificationRepository {
     required FaceVerificationData data,
   });
 
+  // ==========================================
+  // NEW: Get Face Verification status (Prerequisite)
+  // ==========================================
+  /// Checks if users/{uid}.faceVerified is true
+  Future<bool> getFaceVerificationStatus(String userId);
+
   /// Uploads request ID images to Cloudinary. Does not write Firestore.
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
     required String frontIdPath,

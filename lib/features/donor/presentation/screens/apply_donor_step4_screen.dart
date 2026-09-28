@@ -6,9 +6,6 @@ import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/firestore_service.dart';
 import '../../../verification/domain/entities/request_id_verification_data.dart';
-import '../../../verification/domain/repositories/i_verification_repository.dart';
-import '../../../verification/presentation/id_verification_flow.dart';
-import '../../../verification/presentation/widgets/request_id_summary_card.dart';
 
 class ApplyDonorStep4Screen extends StatefulWidget {
   final String bloodType;
@@ -33,73 +30,47 @@ class ApplyDonorStep4Screen extends StatefulWidget {
 class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
   bool _isSubmitting = false;
   bool _isLoadingStatus = true;
-  String? _userVerificationStatus;
-  String? _rejectionReason;
-  RequestIdVerificationData? _idVerification;
   String? _savedIdSubmissionId;
+  String? _frontIdImageUrl;
+  String? _backIdImageUrl;
+  String? _idType;
+  String? _validationStatus;
   bool _agreedToTerms = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedIdSubmission();
+    _loadAttachedIdSubmission();
   }
 
-  Future<void> _loadSavedIdSubmission() async {
+  /// Automatically fetch the user's previously submitted ID evidence to attach to this application
+  Future<void> _loadAttachedIdSubmission() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
       final firestoreService = context.read<FirestoreService>();
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      if (!mounted) return;
-
-      final userData = userDoc.data();
-      String? profileStatus = userData?['idVerificationStatus'] as String?;
-
       final savedId = await firestoreService.getLatestSavedIdSubmissionForUser(
         user.uid,
       );
 
       if (!mounted) return;
 
-      setState(() {
-        _savedIdSubmissionId = savedId?['submissionId'] as String?;
-        _userVerificationStatus =
-            profileStatus ?? (savedId?['status'] as String?);
-        _rejectionReason = savedId?['rejectionReason'] as String?;
-      });
+      if (savedId != null) {
+        setState(() {
+          _savedIdSubmissionId = savedId['submissionId'] as String?;
+          _frontIdImageUrl = savedId['frontIdImageUrl'] as String?;
+          _backIdImageUrl = savedId['backIdImageUrl'] as String?;
+          _idType = savedId['idType'] as String?;
+          _validationStatus = savedId['validationStatus'] as String?;
+        });
+      }
     } catch (e) {
-      debugPrint('Error loading saved ID submission: $e');
+      debugPrint('Error loading attached ID submission: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoadingStatus = false);
       }
-    }
-  }
-
-  Future<void> _captureValidId() async {
-    if (_userVerificationStatus == 'pending') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Your ID verification is currently pending admin review.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    final result = await IdVerificationFlow.start(context);
-    if (!mounted) return;
-    if (result != null && result.isComplete) {
-      setState(() => _idVerification = result);
     }
   }
 
@@ -124,56 +95,28 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
       return;
     }
 
+    if (_savedIdSubmissionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No submitted ID found. Please complete ID submission first.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
-      final bool isApproved = RequestIdVerificationData.isApprovedStatus(
-        _userVerificationStatus,
-      );
-      final bool hasSavedReusableId =
-          _savedIdSubmissionId != null && isApproved;
-      final bool needsIdCapture = !hasSavedReusableId;
-
-      final repository = context.read<IVerificationRepository>();
       final firestoreService = context.read<FirestoreService>();
 
-      String? frontUrl;
-      String? backUrl;
-      String? idType = 'Government ID';
-      String? submissionId = _savedIdSubmissionId;
-      RequestIdVerificationData? finalIdData = _idVerification;
-
-      if (needsIdCapture && _idVerification != null) {
-        final uploaded = await repository.uploadRequestIdImages(
-          frontIdPath: _idVerification!.frontIdImage!,
-          backIdPath: _idVerification!.backIdImage,
-        );
-        frontUrl = uploaded.frontUrl;
-        backUrl = uploaded.backUrl;
-        idType = _idVerification!.idType;
-
-        submissionId = await repository.saveOrUpdateIdSubmission(
-          userId: user.uid,
-          data: _idVerification!,
-        );
-      } else if (!needsIdCapture && submissionId != null) {
-        final existingIdDoc = await FirebaseFirestore.instance
-            .collection('id_verifications')
-            .doc(submissionId)
-            .get();
-
-        if (existingIdDoc.exists) {
-          final data = existingIdDoc.data()!;
-          frontUrl = data['frontIdImageUrl'] as String?;
-          backUrl = data['backIdImageUrl'] as String?;
-          idType = data['idType'] as String? ?? 'Government ID';
-
-          finalIdData = RequestIdVerificationData(
-            idType: idType,
-            validationStatus: data['validationStatus'] ?? 'valid',
-          );
-        }
-      }
+      // Reconstruct ID verification entity with the attached submission attributes
+      final finalIdData = RequestIdVerificationData(
+        idType: _idType ?? 'Government ID',
+        validationStatus: _validationStatus ?? 'valid',
+      );
 
       // Fetch user profile info to populate the donor document
       final userDoc = await FirebaseFirestore.instance
@@ -185,7 +128,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
       final chapter = userData['chapter'] ?? 'PRC Chapter';
       final email = user.email ?? '';
 
-      // Submit donor application including root-level image and ID type fields for admin visibility
+      // Submit donor application with the attached submitted ID for PRC Admin Review
       await firestoreService.submitRequestWithId(
         collection: 'donors',
         requestPayload: {
@@ -196,7 +139,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
           'email': email,
           'chapter': chapter,
           'isDonor': false,
-          'donorStatus': 'pending',
+          'donorStatus': 'pending', // Sent directly to PRC Admin review queue
           'bloodType': widget.bloodType,
           'isAvailableForDonation': widget.isAvailable,
           'lastDonationDate': widget.lastDonationDate != null
@@ -204,24 +147,26 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
               : null,
           'isEligible': widget.isEligible,
           'eligibilityAnswers': widget.eligibilityAnswers,
-          'frontIdImageUrl': frontUrl ?? '',
-          'backIdImageUrl': backUrl ?? '',
-          'idType': idType,
+          'frontIdImageUrl': _frontIdImageUrl ?? '',
+          'backIdImageUrl': _backIdImageUrl ?? '',
+          'idType': _idType ?? 'Government ID',
           'appliedForDonorAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
           'stepCompleted': 4,
         },
-        idData: finalIdData ?? const RequestIdVerificationData(),
-        frontIdImageUrl: frontUrl ?? '',
-        backIdImageUrl: backUrl ?? '',
-        idVerificationSubmissionId: submissionId,
+        idData: finalIdData,
+        frontIdImageUrl: _frontIdImageUrl ?? '',
+        backIdImageUrl: _backIdImageUrl,
+        idVerificationSubmissionId: _savedIdSubmissionId,
       );
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Donor application submitted successfully!'),
+          content: Text(
+            'Donor application submitted successfully and sent for PRC admin review.',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -285,12 +230,6 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isApproved = RequestIdVerificationData.isApprovedStatus(
-      _userVerificationStatus,
-    );
-    final bool isPending = _userVerificationStatus == 'pending';
-    final bool isRejected = _userVerificationStatus == 'rejected';
-    final bool canBypassId = isApproved && _savedIdSubmissionId != null;
     final answers = widget.eligibilityAnswers;
 
     return Scaffold(
@@ -327,7 +266,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Your application is ready for submission. Please review your details and confirm your identity verification below.',
+                            'Your application is ready. Please review your details. Your submitted ID will be attached automatically for PRC admin review.',
                             style: TextStyle(
                               color: Colors.green.shade900,
                               fontSize: 13,
@@ -423,173 +362,50 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                   ),
                   const Divider(height: 20),
 
-                  if (canBypassId) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 24,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '✓ Identity already verified',
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                  // Attached ID status indicator badge
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '✓ Submitted ID Attached',
+                                style: TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Your approved identity verification will be used for this donor application.',
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontSize: 11,
-                                  ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _idType != null
+                                    ? 'Using your submitted $_idType record for admin review.'
+                                    : 'Your submitted ID will be attached to this application.',
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 11,
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (isPending) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.hourglass_empty,
-                            color: Colors.orange,
-                            size: 24,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Your ID verification is currently pending admin review.',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (isRejected) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.red,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _rejectionReason != null &&
-                                      _rejectionReason!.trim().isNotEmpty
-                                  ? 'Previous ID submission rejected: $_rejectionReason'
-                                  : 'Your previous ID verification was rejected. Please resubmit your ID.',
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: OutlinedButton.icon(
-                        onPressed: _isSubmitting ? null : _captureValidId,
-                        icon: const Icon(
-                          Icons.badge_outlined,
-                          color: Color(0xFF2E7D32),
-                        ),
-                        label: const Text(
-                          'Resubmit Government ID',
-                          style: TextStyle(
-                            color: Color(0xFF2E7D32),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            ],
                           ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF2E7D32)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-                  ] else ...[
-                    const Text(
-                      'To complete your donor application, please verify your identity with a valid government ID.',
-                      style: TextStyle(color: Colors.grey, fontSize: 11),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_idVerification != null)
-                      RequestIdSummaryCard(
-                        data: _idVerification!,
-                        onRecapture: _captureValidId,
-                      )
-                    else
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : _captureValidId,
-                          icon: const Icon(
-                            Icons.badge_outlined,
-                            color: Color(0xFF2E7D32),
-                          ),
-                          label: const Text(
-                            'Capture Government ID for Verification',
-                            style: TextStyle(
-                              color: Color(0xFF2E7D32),
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFF2E7D32)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
 
                   const SizedBox(height: 24),
 
@@ -636,9 +452,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                         flex: 2,
                         child: ElevatedButton(
                           onPressed:
-                              (_isSubmitting ||
-                                  isPending ||
-                                  (!canBypassId && _idVerification == null))
+                              (_isSubmitting || _savedIdSubmissionId == null)
                               ? null
                               : _submitDonorApplication,
                           style: ElevatedButton.styleFrom(

@@ -31,9 +31,12 @@ class ProfileService {
     required String uid,
     String? fullName,
     required String phoneNumber,
+    String? birthday,
+    String? nationality,
     String? province,
     String? municipality,
     String? barangay,
+    String? purok,
   }) async {
     final Map<String, dynamic> data = {
       'uid': uid,
@@ -43,14 +46,17 @@ class ProfileService {
     };
 
     if (fullName != null) data['fullName'] = fullName;
+    if (birthday != null) data['birthday'] = birthday;
+    if (nationality != null) data['nationality'] = nationality;
     if (province != null) data['province'] = province;
     if (municipality != null) data['municipality'] = municipality;
     if (barangay != null) data['barangay'] = barangay;
+    if (purok != null) data['purok'] = purok;
 
     // Use set+merge so first-time Google users without a stub still succeed.
-    await _firestore.collection('users').doc(uid).set(
-      data,
-      SetOptions(merge: true),
-    );
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .set(data, SetOptions(merge: true));
   }
 }

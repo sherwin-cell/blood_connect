@@ -1,6 +1,8 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
@@ -44,12 +46,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  // Gesture Recognizers for Legal Links
+  late TapGestureRecognizer _termsRecognizer;
+  late TapGestureRecognizer _privacyRecognizer;
+
   final RegExp _emailRegex = RegExp(
     r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
   );
 
   @override
+  void initState() {
+    super.initState();
+
+    // Launch Terms and Conditions live URL
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () async {
+        final Uri url = Uri.parse(
+          'https://sherwin-cell.github.io/blood-connect-legal/terms.html',
+        );
+        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          if (mounted) {
+            _showSnackBar('Could not launch Terms and Conditions.');
+          }
+        }
+      };
+
+    // Launch Privacy Notice live URL
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () async {
+        final Uri url = Uri.parse(
+          'https://sherwin-cell.github.io/blood-connect-legal/privacy.html',
+        );
+        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          if (mounted) {
+            _showSnackBar('Could not launch Privacy Notice.');
+          }
+        }
+      };
+  }
+
+  @override
   void dispose() {
+    _termsRecognizer.dispose();
+    _privacyRecognizer.dispose();
     _firstNameController.dispose();
     _middleNameController.dispose();
     _lastNameController.dispose();
@@ -77,15 +116,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  /// Pops Login/Register off the stack so [AuthGate] can route the session.
   void _returnToAuthGate() {
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
-
-  // ============================================================
-  // EMAIL + PASSWORD REGISTRATION
-  // ============================================================
 
   Future<void> _onRegisterPressed() async {
     if (_isSubmitting || _isGoogleLoading) return;
@@ -117,7 +151,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       final fullName = nameParts.join(' ');
 
-      // Create Firebase email/password account
       final userCredential = await _authService.register(
         email: email,
         password: password,
@@ -132,17 +165,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
 
-      // Update Firebase display name
       await user.updateDisplayName(fullName);
 
-      // Create Blood-Connect Firestore profile stub
       await _firestoreService.createUserProfile(
         uid: user.uid,
         fullname: fullName,
         email: email,
       );
 
-      // Send email verification — AuthGate shows EmailVerificationScreen next
       await _authService.sendEmailVerification();
 
       _returnToAuthGate();
@@ -159,10 +189,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // ============================================================
-  // GOOGLE REGISTRATION
-  // ============================================================
-
   Future<void> _onGoogleSignInPressed() async {
     if (_isSubmitting || _isGoogleLoading) return;
 
@@ -177,7 +203,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      // AuthService already ensures a Firestore profile stub exists.
       _returnToAuthGate();
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -223,7 +248,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               _buildProgressIndicator(),
               const SizedBox(height: 24),
 
-              // Header Logo
               Row(
                 children: [
                   const Icon(
@@ -294,7 +318,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // STEP 1: Personal Details & Email
   Widget _buildStep1() {
     return Form(
       key: _formKeyStep1,
@@ -351,7 +374,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ],
             textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration('MIDDLE NAME (FULL)'),
+            decoration: _inputDecoration('MIDDLE NAME'),
             validator: (value) {
               if (!_hasNoMiddleName &&
                   (value == null || value.trim().isEmpty)) {
@@ -439,30 +462,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   color: Colors.grey.shade700,
                   height: 1.3,
                 ),
-                children: const [
-                  TextSpan(text: 'By tapping '),
-                  TextSpan(
+                children: [
+                  const TextSpan(text: 'By tapping '),
+                  const TextSpan(
                     text: 'Continue',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
-                  TextSpan(text: ', you agree with the '),
+                  const TextSpan(text: ', you agree with the '),
                   TextSpan(
                     text: 'Terms and Conditions',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppColors.primaryRed,
                       fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
                     ),
+                    recognizer: _termsRecognizer,
                   ),
-                  TextSpan(text: ' and '),
+                  const TextSpan(text: ' and '),
                   TextSpan(
                     text: 'Privacy Notice',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppColors.primaryRed,
                       fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
                     ),
+                    recognizer: _privacyRecognizer,
                   ),
                 ],
               ),
@@ -471,7 +498,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
           const SizedBox(height: 40),
 
-          // Continue Button
           SizedBox(
             width: double.infinity,
             height: 44,
@@ -487,7 +513,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
           const SizedBox(height: 16),
 
-          // Google Sign-In Button
           _buildGoogleSignInButton(),
 
           const SizedBox(height: 16),
@@ -498,7 +523,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // STEP 2: Password Creation
   Widget _buildStep2() {
     return Form(
       key: _formKeyStep2,
@@ -603,7 +627,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // STEP 3: Review & Submit
   Widget _buildStep3() {
     final firstName = _firstNameController.text.trim().toUpperCase();
     final middleName = _hasNoMiddleName

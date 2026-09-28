@@ -14,6 +14,9 @@ class RequestIdVerificationProvider extends ChangeNotifier {
   String?
   _verificationStatus; // null, 'pending', 'approved', 'rejected', 'unverified', ''
 
+  // NEW: Face verification prerequisite state
+  bool _isFaceVerified = false;
+
   RequestIdVerificationProvider({
     required this.repository,
     required this.userId,
@@ -24,30 +27,41 @@ class RequestIdVerificationProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get verificationStatus => _verificationStatus;
 
+  // NEW: Expose face verification status to UI
+  bool get isFaceVerified => _isFaceVerified;
+
   bool get isAccountFullyVerified =>
       _verificationStatus == 'approved' || _verificationStatus == 'verified';
 
   bool get isVerificationPending => _verificationStatus == 'pending';
 
+  // NEW: ID submission is only allowed if face is verified AND ID status permits it
   bool get canSubmitId =>
-      _verificationStatus == null ||
-      _verificationStatus == 'unverified' ||
-      _verificationStatus == '' ||
-      _verificationStatus == 'rejected';
+      _isFaceVerified &&
+      (_verificationStatus == null ||
+          _verificationStatus == 'unverified' ||
+          _verificationStatus == '' ||
+          _verificationStatus == 'rejected');
 
   Future<void> loadVerificationStatus() async {
     _setLoading(true);
     _errorMessage = null;
     try {
+      // 1. Fetch Face Verification status (Prerequisite)
+      // Note: Ensure your repository has this method or update it to match your repo method name
+      _isFaceVerified = await repository.getFaceVerificationStatus(userId);
+      debugPrint('DEBUG FACE VERIFIED: $_isFaceVerified');
+
+      // 2. Fetch ID Verification status
       final status = await repository.getIdVerificationStatus(userId);
-      debugPrint('DEBUG REPO STATUS: $status');
+      debugPrint('DEBUG REPO ID STATUS: $status');
       _verificationStatus = status;
     } catch (e) {
       debugPrint('DEBUG ERROR: $e');
       _errorMessage = 'Failed to load verification status.';
     } finally {
       _setLoading(false);
-      debugPrint('DEBUG FINAL CAN SUBMIT: $canSubmitId');
+      debugPrint('DEBUG FINAL CAN SUBMIT ID: $canSubmitId');
     }
   }
 
@@ -113,9 +127,11 @@ class RequestIdVerificationProvider extends ChangeNotifier {
     try {
       _data = _data.copyWith(submittedAt: DateTime.now());
 
+      // Save to repository with boolean status
       await repository.saveOrUpdateIdSubmission(userId: userId, data: _data);
 
-      _verificationStatus = 'pending';
+      // Set local state to approved/verified (true) immediately since there's no admin app
+      _verificationStatus = 'approved';
       notifyListeners();
       return true;
     } catch (e) {

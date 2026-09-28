@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/repositories/donor_repository_impl.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart';
+import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
 
 class MatchedDonorsScreen extends StatelessWidget {
   final String requesterBloodType;
@@ -163,7 +163,7 @@ class MatchedDonorsScreen extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => ChatRoomScreen(
+                              builder: (context) => PrcChatRoomScreen(
                                 chatId: chatId,
                                 otherUserName: donorName,
                               ),
