@@ -15,7 +15,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          'Face Verification',
+          'Identity Verification',
           style: TextStyle(
             color: Colors.black87,
             fontSize: 16,
@@ -40,7 +40,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Verify your face',
+                'Identity Verification',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -49,7 +49,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Face verification is automatic. Government IDs are submitted later with each request.',
+                'Complete your selfie and upload a valid ID in one guided flow.',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: Colors.black54,
@@ -71,21 +71,25 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 child: ListView(
                   physics: const ClampingScrollPhysics(),
                   children: [
-                    _buildStepItem('1', 'Take a selfie', 'Follow camera instructions'),
+                    _buildStepItem(
+                      '1',
+                      'Take a selfie',
+                      'Follow the live face verification steps',
+                    ),
                     _buildStepItem(
                       '2',
-                      'Face detection',
-                      'Keep your face inside the oval',
+                      'Choose a valid ID',
+                      'Select the government-issued ID type you will upload',
                     ),
                     _buildStepItem(
                       '3',
-                      'Liveness check',
-                      'Turn your head and smile when asked',
+                      'Upload front and back',
+                      'Capture both sides clearly before continuing',
                     ),
                     _buildStepItem(
                       '4',
-                      'Automatic result',
-                      'Your account is marked Face Verified',
+                      'Review and submit',
+                      'Finish the identity check in one guided flow',
                       isLast: true,
                     ),
                   ],
@@ -97,7 +101,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 height: 46,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.of(context).push(
+                    Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
                         builder: (_) =>
                             const FaceVerificationInstructionsScreen(),

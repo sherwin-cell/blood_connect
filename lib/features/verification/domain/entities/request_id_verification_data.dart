@@ -22,10 +22,11 @@ class RequestIdVerificationData {
     return !isApprovedStatus(status);
   }
 
+  // FIXED: Now properly checks for idType, frontIdImage, AND backIdImage!
   bool get isComplete =>
       (idType != null && idType!.trim().isNotEmpty) &&
       (frontIdImage != null && frontIdImage!.isNotEmpty) &&
-      validationStatus == 'valid';
+      (backIdImage != null && backIdImage!.isNotEmpty);
 
   RequestIdVerificationData copyWith({
     String? idType,
@@ -51,8 +52,9 @@ class RequestIdVerificationData {
       'idType': idType,
       'frontIdImageUrl': frontIdImageUrl,
       'backIdImageUrl': backIdImageUrl,
-      'validationStatus': validationStatus,
-      'submittedAt': submittedAt?.toIso8601String(),
+      'validationStatus': validationStatus ?? 'pending',
+      'submittedAt':
+          submittedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 }

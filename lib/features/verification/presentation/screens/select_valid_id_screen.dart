@@ -1,10 +1,12 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../provider/request_id_verification_provider.dart';
+import '../../domain/entities/request_id_verification_data.dart';
+import '../../presentation/provider/request_id_verification_provider.dart';
 import 'capture_id_screen.dart';
 import 'review_id_screen.dart';
 
@@ -59,33 +61,54 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
   String? _selectedIdType;
   File? _frontIdImage;
   File? _backIdImage;
+
   final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
       context.read<RequestIdVerificationProvider>().loadVerificationStatus();
     });
   }
 
-  /// Picks both front and back ID images simultaneously from the gallery
+  // ============================================================
+  // GALLERY
+  // ============================================================
+
   Future<void> _pickBothImagesFromGallery() async {
     try {
       final List<XFile> pickedFiles = await _picker.pickMultiImage(
         imageQuality: 85,
       );
 
-      if (pickedFiles.isNotEmpty) {
-        setState(() {
-          _frontIdImage = File(pickedFiles[0].path);
-          if (pickedFiles.length > 1) {
-            _backIdImage = File(pickedFiles[1].path);
-          }
-        });
+      if (!mounted) return;
+
+      if (pickedFiles.isEmpty) {
+        return;
       }
+
+      if (pickedFiles.length < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please select both the front and back images of your ID.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _frontIdImage = File(pickedFiles[0].path);
+        _backIdImage = File(pickedFiles[1].path);
+      });
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error choosing images: $e'),
@@ -95,9 +118,13 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     }
   }
 
-  /// Opens live camera capture workflow via CaptureIdScreen
+  // ============================================================
+  // CAMERA
+  // ============================================================
+
   Future<void> _openCameraCapture() async {
-    final provider = context.read<RequestIdVerificationProvider>();
+    final RequestIdVerificationProvider provider = context
+        .read<RequestIdVerificationProvider>();
 
     if (_selectedIdType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,18 +137,40 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
 
     if (!mounted) return;
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: provider,
-          child: const CaptureIdScreen(),
-        ),
-      ),
+    debugPrint('');
+    debugPrint('SELECT ID: Opening CaptureIdScreen...');
+    debugPrint(
+      'SELECT ID: Navigator hashCode = '
+      '${Navigator.of(context).hashCode}',
     );
+
+    final RequestIdVerificationData? result = await Navigator.of(context)
+        .push<RequestIdVerificationData>(
+          MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider.value(
+              value: provider,
+              child: const CaptureIdScreen(),
+            ),
+          ),
+        );
+
+    if (!mounted) return;
+
+    debugPrint('');
+    debugPrint('SELECT ID: CaptureIdScreen returned.');
+    debugPrint('SELECT ID: result == null = ${result == null}');
+
+    if (result != null) {
+      debugPrint('SELECT ID: Passing verification result back to parent.');
+
+      Navigator.of(context).pop<RequestIdVerificationData>(result);
+    }
   }
 
-  /// Bottom sheet selector for choosing between Camera or Gallery
+  // ============================================================
+  // IMAGE SOURCE
+  // ============================================================
+
   void _showImageSourceActionSheet() {
     if (_selectedIdType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,9 +190,14 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Color(0xFFC62828)),
               title: const Text('Take Photos via Camera (Front & Back)'),
-              onTap: () {
+              onTap: () async {
                 Navigator.of(context).pop();
-                _openCameraCapture();
+
+                await Future.delayed(const Duration(milliseconds: 150));
+
+                if (!mounted) return;
+
+                await _openCameraCapture();
               },
             ),
             ListTile(
@@ -152,9 +206,14 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                 color: Color(0xFFC62828),
               ),
               title: const Text('Upload Front & Back from Gallery'),
-              onTap: () {
+              onTap: () async {
                 Navigator.of(context).pop();
-                _pickBothImagesFromGallery();
+
+                await Future.delayed(const Duration(milliseconds: 150));
+
+                if (!mounted) return;
+
+                await _pickBothImagesFromGallery();
               },
             ),
           ],
@@ -163,9 +222,13 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
-  /// Handles action when Continue is pressed after uploading files from gallery
+  // ============================================================
+  // GALLERY CONTINUE
+  // ============================================================
+
   Future<void> _onContinuePressed(BuildContext context) async {
-    final provider = context.read<RequestIdVerificationProvider>();
+    final RequestIdVerificationProvider provider = context
+        .read<RequestIdVerificationProvider>();
 
     if (!provider.isFaceVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -212,27 +275,46 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
 
     await provider.selectIdTypeAndSaveProfile(_selectedIdType!);
 
-    // Process gallery images into provider state
     await provider.processIdCard(_frontIdImage!);
+
     await provider.processBackIdCard(_backIdImage!);
 
     if (!mounted) return;
 
-    // Route directly to Review Screen when using gallery uploads
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: provider,
-          child: const ReviewIdScreen(),
-        ),
-      ),
-    );
+    debugPrint('');
+    debugPrint('SELECT ID: Opening ReviewIdScreen...');
+
+    final RequestIdVerificationData? result = await Navigator.of(context)
+        .push<RequestIdVerificationData>(
+          MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider.value(
+              value: provider,
+              child: const ReviewIdScreen(),
+            ),
+          ),
+        );
+
+    if (!mounted) return;
+
+    debugPrint('');
+    debugPrint('SELECT ID: ReviewIdScreen returned.');
+    debugPrint('SELECT ID: result == null = ${result == null}');
+
+    if (result != null) {
+      debugPrint('SELECT ID: Passing verification result back to parent.');
+
+      Navigator.of(context).pop<RequestIdVerificationData>(result);
+    }
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<RequestIdVerificationProvider>();
+    final RequestIdVerificationProvider provider = context
+        .watch<RequestIdVerificationProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -255,7 +337,9 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                   color: Colors.black87,
                   size: 20,
                 ),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
               )
             : null,
       ),
@@ -321,6 +405,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
+  // ============================================================
+  // STATUS BANNER
+  // ============================================================
+
   Widget _buildStatusBanner({
     required MaterialColor color,
     required String text,
@@ -336,6 +424,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
       child: Text(text, style: TextStyle(color: color.shade900, fontSize: 12)),
     );
   }
+
+  // ============================================================
+  // HEADER
+  // ============================================================
 
   Widget _buildHeaderCard() {
     return Container(
@@ -390,6 +482,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
+  // ============================================================
+  // SECTION TITLE
+  // ============================================================
+
   Widget _buildSectionTitle(String title, String subtitle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,6 +526,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
       ],
     );
   }
+
+  // ============================================================
+  // ID DROPDOWN
+  // ============================================================
 
   Widget _buildDropdownField(RequestIdVerificationProvider provider) {
     final bool isEnabled = provider.isFaceVerified && provider.canSubmitId;
@@ -472,15 +572,24 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
             );
           }).toList(),
           onChanged: isEnabled
-              ? (val) => setState(() => _selectedIdType = val)
+              ? (val) {
+                  setState(() {
+                    _selectedIdType = val;
+                  });
+                }
               : null,
         ),
       ),
     );
   }
 
+  // ============================================================
+  // UPLOAD CARD
+  // ============================================================
+
   Widget _buildUploadCard(RequestIdVerificationProvider provider) {
     final bool isEnabled = provider.isFaceVerified && provider.canSubmitId;
+
     final bool hasBothImages = _frontIdImage != null && _backIdImage != null;
 
     return InkWell(
@@ -576,6 +685,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
+  // ============================================================
+  // SECURITY NOTE
+  // ============================================================
+
   Widget _buildSecurityNote() {
     return Row(
       children: const [
@@ -590,6 +703,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
       ],
     );
   }
+
+  // ============================================================
+  // ACCEPTED IDS
+  // ============================================================
 
   Widget _buildAcceptedIdsInfo() {
     return Column(
@@ -611,6 +728,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
       ],
     );
   }
+
+  // ============================================================
+  // PRIVACY
+  // ============================================================
 
   Widget _buildPrivacyBadge() {
     return Container(
@@ -648,6 +769,10 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
       ),
     );
   }
+
+  // ============================================================
+  // ACTION BUTTON
+  // ============================================================
 
   Widget _buildActionButtons(
     RequestIdVerificationProvider provider,

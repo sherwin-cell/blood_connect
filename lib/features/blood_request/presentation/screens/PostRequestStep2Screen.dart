@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import './PostRequestStep3Screen.dart';
+import '../widgets/step_indicator.dart';
 
 class PostRequestStep2Screen extends StatefulWidget {
   final String patientName;
   final int patientAge;
+  final String patientBirthday;
+  final String patientSex;
+  final String contactNumber;
+  final String relativeName;
   final String relationship;
 
   const PostRequestStep2Screen({
     super.key,
     required this.patientName,
     required this.patientAge,
+    required this.patientBirthday,
+    required this.patientSex,
+    required this.contactNumber,
+    required this.relativeName,
     required this.relationship,
   });
 
@@ -23,7 +32,8 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
   String? _selectedBloodType = 'A+';
   bool _anyBloodType = false;
   String? _selectedUnits;
-  String? _selectedComponent;
+  String? _selectedComponent = 'Whole Blood';
+  final _hemoglobinController = TextEditingController();
   final _notesController = TextEditingController();
 
   final List<String> _bloodTypes = [
@@ -36,16 +46,18 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
     'O+',
     'O-',
   ];
-  final List<String> _unitsOptions = ['1', '2', '3', '4', '5', '6+'];
+  final List<String> _unitsOptions = ['1', '2', '3', '4', '5', 'Others'];
   final List<String> _components = [
     'Whole Blood',
     'Red Blood Cells',
     'Platelets',
     'Plasma',
+    'Cryoprecipitate',
   ];
 
   @override
   void dispose() {
+    _hemoglobinController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -76,10 +88,15 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
         builder: (context) => PostRequestStep3Screen(
           patientName: widget.patientName,
           patientAge: widget.patientAge,
+          patientBirthday: widget.patientBirthday,
+          patientSex: widget.patientSex,
+          contactNumber: widget.contactNumber,
+          relativeName: widget.relativeName,
           relationship: widget.relationship,
           bloodType: _anyBloodType ? 'Any Type' : _selectedBloodType!,
           unitsRequired: int.tryParse(_selectedUnits!.replaceAll('+', '')) ?? 1,
           component: _selectedComponent ?? 'Whole Blood',
+          hemoglobin: _hemoglobinController.text.trim(),
           urgency: 'Urgent',
           neededByDate: DateTime.now().add(const Duration(days: 1)),
           notes: _notesController.text.trim(),
@@ -94,7 +111,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'Post Blood Request',
+          'Apply for Blood Request',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -110,45 +127,8 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Step Indicator Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text(
-                    '1\nPatient Info',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                  Expanded(
-                    child: Divider(thickness: 2, indent: 8, endIndent: 8),
-                  ),
-                  Text(
-                    '2\nBlood Details',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryRed,
-                    ),
-                  ),
-                  Expanded(
-                    child: Divider(thickness: 2, indent: 8, endIndent: 8),
-                  ),
-                  Text(
-                    '3\nHospital Info',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                  Expanded(
-                    child: Divider(thickness: 2, indent: 8, endIndent: 8),
-                  ),
-                  Text(
-                    '4\nReview & Submit',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                ],
-              ),
+              // Clean Shared Circular Step Indicator for Step 2
+              const StepIndicator(currentStep: 2),
               const SizedBox(height: 16),
 
               // Top Banner
@@ -172,7 +152,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
                           Text(
-                            'Blood Details',
+                            'Blood Requirements',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: AppColors.primaryRed,
@@ -181,7 +161,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Provide the specific blood requirements to help us find the most compatible donors.',
+                            'Specify the exact blood parameters and clinical components needed.',
                             style: TextStyle(
                               color: Colors.black54,
                               fontSize: 11,
@@ -196,7 +176,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Blood Requirements',
+                'Blood Details & Lab Specs',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -216,7 +196,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Blood Type Needed
+                    // 1. Blood Type Needed
                     DropdownButtonFormField<String>(
                       value: _anyBloodType ? null : _selectedBloodType,
                       decoration: _inputDecoration(
@@ -235,7 +215,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Don't know the blood type banner
+                    // Don't know the blood type banner / Checkbox
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -246,7 +226,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Don\'t know the blood type?',
+                            'Don\'t know the exact blood type?',
                             style: TextStyle(
                               color: AppColors.primaryRed,
                               fontWeight: FontWeight.bold,
@@ -255,7 +235,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                           ),
                           const SizedBox(height: 2),
                           const Text(
-                            'You can select "Any Type" and we\'ll find the most compatible donors.',
+                            'Select "Any Blood Type" to broadcast to compatible profiles.',
                             style: TextStyle(
                               color: Colors.black54,
                               fontSize: 10.5,
@@ -272,8 +252,9 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                                   onChanged: (val) {
                                     setState(() {
                                       _anyBloodType = val ?? false;
-                                      if (_anyBloodType)
+                                      if (_anyBloodType) {
                                         _selectedBloodType = null;
+                                      }
                                     });
                                   },
                                 ),
@@ -293,13 +274,13 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Units Needed
+                    // 2. Units Needed
                     DropdownButtonFormField<String>(
                       value: _selectedUnits,
                       decoration: _inputDecoration(
                         'Units Needed',
-                        Icons.calendar_today_outlined,
-                      ), // Using calendar icon placeholder or list style matching design
+                        Icons.list_alt_outlined,
+                      ),
                       hint: const Text('Select number of units'),
                       items: _unitsOptions
                           .map(
@@ -310,14 +291,14 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Components
+                    // 3. Component
                     DropdownButtonFormField<String>(
                       value: _selectedComponent,
                       decoration: _inputDecoration(
-                        'Components (Optional)',
-                        Icons.local_florist_outlined,
+                        'Blood Component',
+                        Icons.science_outlined,
                       ),
-                      hint: const Text('Select component if needed'),
+                      hint: const Text('Select component type'),
                       items: _components
                           .map(
                             (c) => DropdownMenuItem(value: c, child: Text(c)),
@@ -328,28 +309,13 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Special Notes
+                    // 4. Latest Hemoglobin / Hematocrit
                     TextFormField(
-                      controller: _notesController,
-                      maxLines: 3,
-                      maxLength: 200,
-                      decoration: InputDecoration(
-                        labelText: 'Special Notes (Optional)',
-                        alignLabelWithHint: true,
-                        prefixIcon: const Icon(
-                          Icons.edit_outlined,
-                          color: AppColors.primaryRed,
-                          size: 20,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        contentPadding: const EdgeInsets.all(12),
+                      controller: _hemoglobinController,
+                      decoration: _inputDecoration(
+                        'Latest Hemoglobin / Hematocrit (e.g., 9.5 g/dL)',
+                        Icons.medical_services_outlined,
                       ),
-                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -374,7 +340,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'The more accurate your details, the easier it is for us to find the right donors.',
+                        'Precise component and blood specification details accelerate donor matching.',
                         style: TextStyle(
                           color: Colors.amber.shade900,
                           fontSize: 11,
@@ -465,7 +431,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     );
   }
 }

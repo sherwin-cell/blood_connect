@@ -6,9 +6,7 @@ import '../provider/verification_provider.dart';
 import '../screens/selfie_screen.dart';
 
 class FaceVerificationInstructionsScreen extends StatelessWidget {
-  final VoidCallback? onComplete;
-
-  const FaceVerificationInstructionsScreen({super.key, this.onComplete});
+  const FaceVerificationInstructionsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +17,7 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          'Face Verification Guide',
+          'Identity Verification Guide',
           style: TextStyle(
             color: Colors.black87,
             fontSize: 15,
@@ -68,7 +66,7 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 10),
                           const Text(
-                            'Important Instructions',
+                            'Identity Verification Steps',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -78,7 +76,7 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           const Text(
-                            'Please follow these guidelines for a successful match.',
+                            'Please follow these guidelines to complete your selfie and ID check.',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.black54,
@@ -86,27 +84,34 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 12),
+
                           const _InstructionTile(
                             icon: Icons.lightbulb_outline_rounded,
                             title: 'Good Lighting',
                             subtitle:
                                 'Ensure your face is evenly lit. Avoid direct harsh shadows.',
                           ),
+
                           const SizedBox(height: 8),
+
                           const _InstructionTile(
                             icon: Icons.face_rounded,
                             title: 'Keep Face in Oval Frame',
                             subtitle:
                                 'Position face in oval guide and stay still until review screen.',
                           ),
+
                           const SizedBox(height: 8),
+
                           const _InstructionTile(
                             icon: Icons.visibility_rounded,
                             title: 'Remove Face Coverings',
                             subtitle:
                                 'Take off sunglasses, hats, masks, or heavy items.',
                           ),
+
                           const SizedBox(height: 8),
+
                           const _InstructionTile(
                             icon: Icons.lock_outline_rounded,
                             title: 'Do Not Look Away',
@@ -115,7 +120,9 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 16),
+
                       SizedBox(
                         width: double.infinity,
                         height: 46,
@@ -123,15 +130,15 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                           onPressed: () {
                             final provider = context
                                 .read<VerificationProvider>();
-                            Navigator.pushReplacement(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (_) => ChangeNotifierProvider.value(
-                                                              value: provider,
-                                                              child: SelfieScreen(onComplete: onComplete),
-                                                            ),
-                                                          ),
-                                                        );
+
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => ChangeNotifierProvider.value(
+                                  value: provider,
+                                  child: const SelfieScreen(),
+                                ),
+                              ),
+                            );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC62828),
@@ -142,7 +149,7 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                             ),
                           ),
                           child: const Text(
-                            'I Understand, Proceed to Selfie',
+                            'I Understand, Start Identity Verification',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -150,6 +157,7 @@ class FaceVerificationInstructionsScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+
                       const SizedBox(height: 8),
                     ],
                   ),

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/services/firestore_service.dart';
 import 'PostRequestStep2Screen.dart';
+import '../widgets/step_indicator.dart';
 
 class PostRequestStep1Screen extends StatefulWidget {
   const PostRequestStep1Screen({super.key});
@@ -14,10 +12,17 @@ class PostRequestStep1Screen extends StatefulWidget {
 
 class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
   final _formKey = GlobalKey<FormState>();
+
   final _patientNameController = TextEditingController();
   final _ageController = TextEditingController();
-  String _selectedRelationship = 'Family Member';
+  final _bdayController = TextEditingController();
+  final _contactController = TextEditingController();
+  final _relativeNameController = TextEditingController();
 
+  String _selectedSex = 'Male';
+  final List<String> _sexOptions = ['Male', 'Female', 'Other'];
+
+  String _selectedRelationship = 'Family Member';
   final List<String> _relationships = [
     'Family Member',
     'Relative',
@@ -30,7 +35,49 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
   void dispose() {
     _patientNameController.dispose();
     _ageController.dispose();
+    _bdayController.dispose();
+    _contactController.dispose();
+    _relativeNameController.dispose();
     super.dispose();
+  }
+
+  // Helper method to show Date Picker for Birthday without the pencil icon
+  Future<void> _selectBirthday(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(
+        const Duration(days: 365 * 25),
+      ), // Default ~25 yrs ago
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      initialEntryMode: DatePickerEntryMode
+          .calendarOnly, // Removes the pencil input-mode toggle
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryRed,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        // Format as YYYY-MM-DD
+        _bdayController.text =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+
+        // Auto calculate age if birthday is picked
+        final age = DateTime.now().year - picked.year;
+        _ageController.text = age.toString();
+      });
+    }
   }
 
   void _nextStep() {
@@ -42,6 +89,10 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
         builder: (context) => PostRequestStep2Screen(
           patientName: _patientNameController.text.trim(),
           patientAge: int.parse(_ageController.text.trim()),
+          patientBirthday: _bdayController.text.trim(),
+          patientSex: _selectedSex,
+          contactNumber: _contactController.text.trim(),
+          relativeName: _relativeNameController.text.trim(),
           relationship: _selectedRelationship,
         ),
       ),
@@ -54,7 +105,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'Post Blood Request',
+          'Apply for Blood Request',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -70,48 +121,11 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Step Indicator Row matching Step 2
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text(
-                    '1\nPatient Info',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryRed,
-                    ),
-                  ),
-                  Expanded(
-                    child: Divider(thickness: 2, indent: 8, endIndent: 8),
-                  ),
-                  Text(
-                    '2\nBlood Details',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                  Expanded(
-                    child: Divider(thickness: 2, indent: 8, endIndent: 8),
-                  ),
-                  Text(
-                    '3\nHospital Info',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                  Expanded(
-                    child: Divider(thickness: 2, indent: 8, endIndent: 8),
-                  ),
-                  Text(
-                    '4\nReview & Submit',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                ],
-              ),
+              // Clean Shared Circular Step Indicator for Step 1
+              const StepIndicator(currentStep: 1),
               const SizedBox(height: 16),
 
-              // Top Banner matching Step 2
+              // Top Banner
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
@@ -132,7 +146,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
                           Text(
-                            'Patient Info',
+                            'Patient Information',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: AppColors.primaryRed,
@@ -141,7 +155,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Provide the patient details for this request.',
+                            'Provide complete patient and contact credentials.',
                             style: TextStyle(
                               color: Colors.black54,
                               fontSize: 11,
@@ -156,7 +170,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Patient Details',
+                'Personal & Contact Details',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -165,7 +179,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
               ),
               const SizedBox(height: 8),
 
-              // Form Card Container matching Step 2
+              // Form Card Container
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -176,34 +190,121 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 1. Patient Name
                     TextFormField(
                       controller: _patientNameController,
                       decoration: _inputDecoration(
-                        'Patient Full Name',
+                        'Patient Name (Surname, First, Middle)',
                         Icons.person_outline,
                       ),
-                      validator: (val) => val == null || val.isEmpty
-                          ? 'Enter patient name'
+                      validator: (val) => val == null || val.trim().isEmpty
+                          ? 'Please enter patient full name'
                           : null,
                     ),
                     const SizedBox(height: 16),
+
+                    // Row for Age & Sex
+                    Row(
+                      children: [
+                        // 2. Age
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _ageController,
+                            keyboardType: TextInputType.number,
+                            decoration: _inputDecoration(
+                              'Age',
+                              Icons.cake_outlined,
+                            ),
+                            validator: (val) =>
+                                val == null || int.tryParse(val) == null
+                                ? 'Valid age required'
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // 4. Sex
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedSex,
+                            decoration: _inputDecoration(
+                              'Sex',
+                              Icons.wc_outlined,
+                            ),
+                            items: _sexOptions
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(s),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) =>
+                                setState(() => _selectedSex = val ?? 'Male'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 3. Birthday
                     TextFormField(
-                      controller: _ageController,
-                      keyboardType: TextInputType.number,
+                      controller: _bdayController,
+                      readOnly: true,
+                      onTap: () => _selectBirthday(context),
                       decoration: _inputDecoration(
-                        'Patient Age',
-                        Icons.cake_outlined,
+                        'Birthday (YYYY-MM-DD)',
+                        Icons.calendar_today_rounded,
                       ),
-                      validator: (val) =>
-                          val == null || int.tryParse(val) == null
-                          ? 'Enter valid age'
+                      validator: (val) => val == null || val.isEmpty
+                          ? 'Please select birthday'
                           : null,
                     ),
                     const SizedBox(height: 16),
+
+                    // 5. Contact Number
+                    TextFormField(
+                      controller: _contactController,
+                      keyboardType: TextInputType.phone,
+                      decoration: _inputDecoration(
+                        'Contact Number',
+                        Icons.phone_outlined,
+                      ),
+                      validator: (val) => val == null || val.length < 7
+                          ? 'Enter valid contact number'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 6. Name of Relative / Relationship Section
+                    const Divider(height: 24),
+                    const Text(
+                      'Representative / Relative Information',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextFormField(
+                      controller: _relativeNameController,
+                      decoration: _inputDecoration(
+                        'Name of Relative / Contact Person',
+                        Icons.badge_outlined,
+                      ),
+                      validator: (val) => val == null || val.trim().isEmpty
+                          ? 'Enter relative/contact name'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+
                     DropdownButtonFormField<String>(
                       value: _selectedRelationship,
                       decoration: _inputDecoration(
-                        'Relationship',
+                        'Relationship to Patient',
                         Icons.group_outlined,
                       ),
                       items: _relationships
@@ -220,7 +321,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
               ),
               const SizedBox(height: 16),
 
-              // Bottom Info Box matching Step 2 style
+              // Bottom Info Box
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -250,7 +351,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
               ),
               const SizedBox(height: 24),
 
-              // Footer Action Buttons matching Step 2
+              // Next Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -300,7 +401,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     );
   }
 }

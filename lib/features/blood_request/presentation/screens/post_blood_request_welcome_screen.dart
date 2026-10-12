@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../screens/PostRequestStep1Screen.dart'; // Make sure this points to your Step 1 file
+import '../screens/PostRequestStep1Screen.dart';
 
 class PostBloodRequestWelcomeScreen extends StatelessWidget {
   const PostBloodRequestWelcomeScreen({super.key});
@@ -12,57 +12,155 @@ class PostBloodRequestWelcomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Emergency Blood Request',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
         ),
         backgroundColor: AppColors.primaryRed,
+        elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Illustration or Icon
+              // Top Section: Icon, Title & Subtitle
+              Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryRed.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.primaryRed.withOpacity(0.15),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.water_drop_rounded,
+                      size: 48,
+                      color: AppColors.primaryRed,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Request Blood in an Emergency',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Connect with verified donors near your hospital location quickly through our secure review and matching workflow.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+
+              // Middle Section: Quick Steps Overview Card
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(color: Colors.grey.shade100),
                 ),
-                child: const Icon(
-                  Icons.water_drop_rounded,
-                  size: 80,
-                  color: AppColors.primaryRed,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'What to expect (4 Quick Steps):',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildStepRow(
+                      stepNumber: '1',
+                      title: 'Patient Information',
+                      subtitle: 'Name, age, birthday, and contact details',
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 12),
+                      child: SizedBox(
+                        height: 10,
+                        child: VerticalDivider(
+                          color: Colors.grey,
+                          thickness: 1,
+                        ),
+                      ),
+                    ),
+                    _buildStepRow(
+                      stepNumber: '2',
+                      title: 'Blood Type & Quantity',
+                      subtitle: 'Required blood type, units, and component',
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 12),
+                      child: SizedBox(
+                        height: 10,
+                        child: VerticalDivider(
+                          color: Colors.grey,
+                          thickness: 1,
+                        ),
+                      ),
+                    ),
+                    _buildStepRow(
+                      stepNumber: '3',
+                      title: 'Hospital & Contact Info',
+                      subtitle: 'Admission hospital, physicians, and BRF PDF',
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 12),
+                      child: SizedBox(
+                        height: 10,
+                        child: VerticalDivider(
+                          color: Colors.grey,
+                          thickness: 1,
+                        ),
+                      ),
+                    ),
+                    _buildStepRow(
+                      stepNumber: '4',
+                      title: 'Review & Submit',
+                      subtitle: 'Verify details and submit for admin review',
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 32),
 
-              // Welcome Title
-              const Text(
-                'Need Blood Urgently?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Description
-              const Text(
-                'Create a blood request in just 3 quick steps to notify verified matching donors near your hospital location instantly.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
-              ),
-              const SizedBox(height: 48),
-
-              // Start Button
+              // Bottom Section: Primary CTA Button
               SizedBox(
                 width: double.infinity,
-                height: 52,
+                height: 50,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.push(
@@ -77,14 +175,14 @@ class PostBloodRequestWelcomeScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    elevation: 2,
+                    elevation: 0,
                   ),
                   child: const Text(
                     'Get Started',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -93,6 +191,58 @@ class PostBloodRequestWelcomeScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  // Helper widget for compact step-by-step layout
+  static Widget _buildStepRow({
+    required String stepNumber,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: AppColors.primaryRed.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              stepNumber,
+              style: const TextStyle(
+                color: AppColors.primaryRed,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

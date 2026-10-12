@@ -45,7 +45,7 @@ class _VerificationBannerState extends State<VerificationBanner> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Verify Face',
+                  'Verify Identity',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -70,7 +70,7 @@ class _VerificationBannerState extends State<VerificationBanner> {
               children: [
                 const Expanded(
                   child: Text(
-                    'Complete automatic face verification from your profile.',
+                    'Complete your identity verification by finishing your selfie and ID check.',
                     style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),

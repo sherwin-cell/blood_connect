@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../domain/entities/request_id_verification_data.dart';
 import '../provider/request_id_verification_provider.dart';
 import '../widgets/id_camera_overlay.dart';
 import 'capture_back_id_screen.dart';
@@ -17,70 +19,180 @@ class CaptureIdScreen extends StatefulWidget {
 class _CaptureIdScreenState extends State<CaptureIdScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
-  bool _isInitializing = true;
+  bool _isInitializing = false;
   bool _isProcessing = false;
-  bool _isNavigatingAway = false;
+  bool _isDisposingCamera = false;
+  bool _shouldRenderPreview = true;
+  int _initializationGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
+    unawaited(_initializeCamera());
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? cameraController = _cameraController;
+    if (!mounted) return;
 
-    if (cameraController == null || !cameraController.value.isInitialized) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      if (_cameraController != null) {
+        unawaited(_disposeCamera());
+      }
       return;
     }
 
-    if (state == AppLifecycleState.inactive) {
-      cameraController.dispose();
-    } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
+    if (state == AppLifecycleState.resumed) {
+      if (_cameraController == null &&
+          !_isDisposingCamera &&
+          !_isInitializing) {
+        unawaited(_initializeCamera());
+      }
+    }
+  }
+
+  Future<void> _disposeCamera() async {
+    if (_isDisposingCamera) return;
+
+    _isDisposingCamera = true;
+    final CameraController? controller = _cameraController;
+    _cameraController = null;
+    _shouldRenderPreview = false;
+
+    if (mounted && !_isProcessing) {
+      setState(() {
+        _isInitializing = true;
+        _shouldRenderPreview = false;
+      });
+    }
+
+    try {
+      if (controller != null && controller.value.isInitialized) {
+        await controller.dispose();
+      }
+    } catch (e) {
+      debugPrint('CaptureIdScreen dispose error: $e');
+    } finally {
+      _isDisposingCamera = false;
+      if (mounted && !_isProcessing) {
+        setState(() {
+          _isInitializing = false;
+          _shouldRenderPreview = false;
+        });
+      }
     }
   }
 
   Future<void> _initializeCamera() async {
+    if (!mounted || _isDisposingCamera || _isInitializing) return;
+
+    final int generation = ++_initializationGeneration;
+    if (mounted) {
+      setState(() {
+        _isInitializing = true;
+        _shouldRenderPreview = false;
+      });
+    }
+
     try {
       final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        throw Exception('No cameras detected on this device.');
+      if (!mounted ||
+          _isDisposingCamera ||
+          generation != _initializationGeneration) {
+        return;
       }
+      if (cameras.isEmpty) throw Exception('No cameras detected.');
 
-      final backCamera = cameras.firstWhere(
+      final cameraDescription = cameras.firstWhere(
         (cam) => cam.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
 
-      _cameraController = CameraController(
-        backCamera,
+      final controller = CameraController(
+        cameraDescription,
         ResolutionPreset.high,
         enableAudio: false,
       );
 
-      await _cameraController!.initialize();
+      if (!mounted ||
+          _isDisposingCamera ||
+          generation != _initializationGeneration) {
+        await controller.dispose();
+        return;
+      }
+
+      final CameraController? previousController = _cameraController;
+      _cameraController = controller;
+      _shouldRenderPreview = false;
+
+      try {
+        await controller.initialize();
+      } catch (e) {
+        if (_cameraController == controller) {
+          _cameraController = null;
+        }
+        rethrow;
+      }
+
+      if (!mounted ||
+          _isDisposingCamera ||
+          generation != _initializationGeneration) {
+        final activeController = _cameraController;
+        if (activeController == controller) {
+          _cameraController = null;
+        }
+        _shouldRenderPreview = false;
+        await controller.dispose();
+        return;
+      }
+
+      if (previousController != null && previousController != controller) {
+        try {
+          if (previousController.value.isInitialized) {
+            await previousController.dispose();
+          }
+        } catch (e) {
+          debugPrint('CaptureIdScreen previous controller dispose error: $e');
+        }
+      }
+
+      _shouldRenderPreview = true;
     } catch (e) {
+      _cameraController = null;
+      _shouldRenderPreview = false;
       if (mounted) {
         _showErrorSnackBar('Failed to initialize camera: $e');
       }
     } finally {
-      if (mounted) {
-        setState(() => _isInitializing = false);
+      if (mounted &&
+          !_isDisposingCamera &&
+          generation == _initializationGeneration) {
+        setState(() {
+          _isInitializing = false;
+          _shouldRenderPreview =
+              _cameraController != null &&
+              _cameraController!.value.isInitialized;
+        });
       }
     }
   }
 
   Future<void> _captureAndProcessId() async {
     if (_isProcessing ||
+        _isDisposingCamera ||
         _cameraController == null ||
         !_cameraController!.value.isInitialized) {
       return;
     }
 
-    setState(() => _isProcessing = true);
+    if (mounted) {
+      setState(() => _isProcessing = true);
+    }
+
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.maybeOf(context);
 
     try {
       final XFile image = await _cameraController!.takePicture();
@@ -102,24 +214,38 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
       if (!mounted) return;
 
       if (success) {
-        setState(() => _isNavigatingAway = true);
-        await _cameraController?.pausePreview().catchError((_) {});
+        final CameraController? controller = _cameraController;
+        _cameraController = null;
+        _shouldRenderPreview = false;
+
+        if (mounted) {
+          setState(() => _shouldRenderPreview = false);
+        }
+
+        if (controller != null && controller.value.isInitialized) {
+          try {
+            await controller.dispose();
+          } catch (e) {
+            debugPrint('CaptureIdScreen capture dispose error: $e');
+          }
+        }
 
         if (!mounted) return;
 
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChangeNotifierProvider.value(
-              value: provider,
-              child: const CaptureBackIdScreen(),
-            ),
-          ),
-        );
+        final RequestIdVerificationData? result = await navigator
+            .push<RequestIdVerificationData>(
+              MaterialPageRoute(
+                builder: (_) => ChangeNotifierProvider.value(
+                  value: provider,
+                  child: const CaptureBackIdScreen(),
+                ),
+              ),
+            );
 
-        if (mounted) {
-          setState(() => _isNavigatingAway = false);
-          await _cameraController?.resumePreview().catchError((_) {});
+        if (!mounted) return;
+
+        if (result != null) {
+          Navigator.of(context).pop<RequestIdVerificationData>(result);
         }
       } else {
         _showErrorSnackBar(
@@ -127,13 +253,15 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
               'Failed to process ID image. Please try again.',
         );
       }
-    } on CameraException catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Camera error: ${e.description}');
-      }
     } catch (e) {
       if (mounted) {
-        _showErrorSnackBar('Error processing ID: $e');
+        scaffoldMessenger?.showSnackBar(
+          SnackBar(
+            content: Text('Error processing ID: $e'),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -155,20 +283,25 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
+    final CameraController? controller = _cameraController;
+    _cameraController = null;
+    if (controller != null && controller.value.isInitialized) {
+      unawaited(_disposeCamera());
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing) {
+    if (_isInitializing || _isDisposingCamera || !_shouldRenderPreview) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
     }
 
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: Center(
@@ -201,13 +334,7 @@ class _CaptureIdScreenState extends State<CaptureIdScreen>
       ),
       body: Stack(
         children: [
-          if (!_isNavigatingAway &&
-              _cameraController != null &&
-              _cameraController!.value.isInitialized)
-            Positioned.fill(child: CameraPreview(_cameraController!))
-          else
-            const Positioned.fill(child: ColoredBox(color: Colors.black)),
-
+          Positioned.fill(child: CameraPreview(controller)),
           const CameraOverlay(),
           const Align(
             alignment: Alignment(0, -0.65),

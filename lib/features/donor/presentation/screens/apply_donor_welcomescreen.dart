@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
-
 import 'apply_donor_step1_screen.dart';
 
 class ApplyDonorWelcomeScreen extends StatelessWidget {
   const ApplyDonorWelcomeScreen({super.key});
+
+  static const Color donorGreen = Color(0xFF2E7D32);
 
   @override
   Widget build(BuildContext context) {
@@ -14,50 +15,137 @@ class ApplyDonorWelcomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Become a Blood Donor',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
         ),
-        backgroundColor: const Color(0xFF2E7D32),
+        backgroundColor: donorGreen,
+        elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Top Section: Icon, Title & Subtitle
+              Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: donorGreen.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: donorGreen.withOpacity(0.15),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.volunteer_activism_rounded,
+                      size: 48,
+                      color: donorGreen,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Become a Blood Donor',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Help save lives by registering as a blood donor and making yourself available for verified blood donation requests.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+
+              // Middle Section: Quick Steps Overview Card
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(color: Colors.grey.shade100),
                 ),
-                child: const Icon(
-                  Icons.favorite_rounded,
-                  size: 80,
-                  color: Color(0xFF2E7D32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'What to expect (4 Quick Steps):',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildStepRow(
+                      stepNumber: '1',
+                      title: 'Blood Type & Availability',
+                      subtitle:
+                          'Provide your blood type and donation availability',
+                    ),
+
+                    _buildConnector(),
+
+                    _buildStepRow(
+                      stepNumber: '2',
+                      title: 'Donation History',
+                      subtitle: 'Tell us about your previous blood donations',
+                    ),
+
+                    _buildConnector(),
+
+                    _buildStepRow(
+                      stepNumber: '3',
+                      title: 'Review Your Information',
+                      subtitle: 'Check your donor details before submitting',
+                    ),
+
+                    _buildConnector(),
+
+                    _buildStepRow(
+                      stepNumber: '4',
+                      title: 'Submit Donor Application',
+                      subtitle:
+                          'Submit your application for donor registration',
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 32),
-              const Text(
-                'Ready to Save Lives?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Apply to become a verified blood donor in 4 quick steps and respond to emergency donation requests in your community.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
-              ),
-              const SizedBox(height: 48),
+
+              // Bottom Section: Primary CTA Button
               SizedBox(
                 width: double.infinity,
-                height: 52,
+                height: 50,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.push(
@@ -68,18 +156,18 @@ class ApplyDonorWelcomeScreen extends StatelessWidget {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
+                    backgroundColor: donorGreen,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    elevation: 2,
+                    elevation: 0,
                   ),
                   child: const Text(
                     'Get Started',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -88,6 +176,67 @@ class ApplyDonorWelcomeScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  static Widget _buildConnector() {
+    return const Padding(
+      padding: EdgeInsets.only(left: 12),
+      child: SizedBox(
+        height: 10,
+        child: VerticalDivider(color: Colors.grey, thickness: 1),
+      ),
+    );
+  }
+
+  static Widget _buildStepRow({
+    required String stepNumber,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: donorGreen.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              stepNumber,
+              style: const TextStyle(
+                color: donorGreen,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
