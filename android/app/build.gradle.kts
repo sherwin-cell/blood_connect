@@ -1,3 +1,4 @@
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -13,6 +14,9 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Required by flutter_local_notifications.
+        isCoreLibraryDesugaringEnabled = true
+
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -24,16 +28,17 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Allow support for physical devices (arm64, armeabi) AND emulators (x86_64)
+        // Support physical devices and emulators.
         ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+            abiFilters.addAll(
+                listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            )
         }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Keep the existing debug signing configuration for development.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -43,6 +48,11 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Required for Java API desugaring in Android notification plugins.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

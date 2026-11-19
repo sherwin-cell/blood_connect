@@ -1,14 +1,23 @@
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 1. Required for Firebase & API calls -->
+    <!-- Internet access for Firebase and API requests -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Android 13+ notification permission -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="blood_connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:largeHeap="true"
-        android:usesCleartextTraffic="true"> <!-- ✅ ADDED: Allows local HTTP requests to 10.0.2.2 -->
+        android:usesCleartextTraffic="true">
+
+        <!-- Default channel used for FCM notification messages -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="blood_connect_notifications" />
 
         <activity
             android:name=".MainActivity"
@@ -19,32 +28,29 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            
+
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
-              
-            <!-- Existing Launcher Filter -->
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <!-- Existing launcher filter -->
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 2. Firebase Passwordless Auth Deep Link Filter -->
+            <!-- Existing Firebase Authentication deep links -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <!-- Your custom web app URL -->
                 <data
                     android:scheme="https"
                     android:host="blood-connect-12ac2.web.app"
                     android:pathPrefix="/" />
 
-                <!-- Firebase default fallback host -->
                 <data
                     android:scheme="https"
                     android:host="blood-connect-12ac2.firebaseapp.com"
@@ -56,12 +62,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
     </application>
 
     <queries>
         <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
         </intent>
     </queries>
+
 </manifest>

@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/request_id_verification_data.dart';
-import '../../presentation/provider/request_id_verification_provider.dart';
+import '../provider/request_id_verification_provider.dart';
 import 'capture_id_screen.dart';
 import 'review_id_screen.dart';
 
@@ -58,146 +58,103 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     ),
   ];
 
+  final ImagePicker _picker = ImagePicker();
   String? _selectedIdType;
   File? _frontIdImage;
   File? _backIdImage;
-
-  final ImagePicker _picker = ImagePicker();
+  bool _preparing = false;
 
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
       context.read<RequestIdVerificationProvider>().loadVerificationStatus();
     });
   }
 
-  // ============================================================
-  // GALLERY
-  // ============================================================
+  void _message(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   Future<void> _pickBothImagesFromGallery() async {
+    if (!context.read<RequestIdVerificationProvider>().canSubmitId) return;
     try {
-      final List<XFile> pickedFiles = await _picker.pickMultiImage(
-        imageQuality: 85,
-      );
-
+      final pickedFiles = await _picker.pickMultiImage(imageQuality: 85);
       if (!mounted) return;
-
-      if (pickedFiles.isEmpty) {
+      if (pickedFiles.isEmpty) return;
+      if (pickedFiles.length != 2) {
+        _message('Please select exactly two photos: front first, then back.');
         return;
       }
-
-      if (pickedFiles.length < 2) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Please select both the front and back images of your ID.',
-            ),
-          ),
-        );
-        return;
-      }
-
       setState(() {
         _frontIdImage = File(pickedFiles[0].path);
         _backIdImage = File(pickedFiles[1].path);
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error choosing images: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _message('Unable to select ID images: $error');
     }
   }
-
-  // ============================================================
-  // CAMERA
-  // ============================================================
 
   Future<void> _openCameraCapture() async {
-    final RequestIdVerificationProvider provider = context
-        .read<RequestIdVerificationProvider>();
-
+    final provider = context.read<RequestIdVerificationProvider>();
+    if (!provider.canSubmitId || _preparing) return;
     if (_selectedIdType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a valid ID type first.')),
-      );
+      _message('Please select a valid ID type first.');
       return;
     }
 
-    await provider.selectIdTypeAndSaveProfile(_selectedIdType!);
-
-    if (!mounted) return;
-
-    debugPrint('');
-    debugPrint('SELECT ID: Opening CaptureIdScreen...');
-    debugPrint(
-      'SELECT ID: Navigator hashCode = '
-      '${Navigator.of(context).hashCode}',
-    );
-
-    final RequestIdVerificationData? result = await Navigator.of(context)
-        .push<RequestIdVerificationData>(
-          MaterialPageRoute(
-            builder: (_) => ChangeNotifierProvider.value(
-              value: provider,
-              child: const CaptureIdScreen(),
-            ),
+    setState(() => _preparing = true);
+    try {
+      await provider.selectIdTypeAndSaveProfile(_selectedIdType!);
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      final result = await navigator.push<RequestIdVerificationData>(
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider.value(
+            value: provider,
+            child: const CaptureIdScreen(),
           ),
-        );
-
-    if (!mounted) return;
-
-    debugPrint('');
-    debugPrint('SELECT ID: CaptureIdScreen returned.');
-    debugPrint('SELECT ID: result == null = ${result == null}');
-
-    if (result != null) {
-      debugPrint('SELECT ID: Passing verification result back to parent.');
-
-      Navigator.of(context).pop<RequestIdVerificationData>(result);
+        ),
+      );
+      if (!mounted) return;
+      if (result != null) navigator.pop<RequestIdVerificationData>(result);
+    } catch (error) {
+      if (!mounted) return;
+      _message('Unable to open ID camera: $error');
+    } finally {
+      if (mounted) setState(() => _preparing = false);
     }
   }
 
-  // ============================================================
-  // IMAGE SOURCE
-  // ============================================================
-
   void _showImageSourceActionSheet() {
+    if (!context.read<RequestIdVerificationProvider>().canSubmitId ||
+        _preparing) {
+      return;
+    }
     if (_selectedIdType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a valid ID type first.')),
-      );
+      _message('Please select a valid ID type first.');
       return;
     }
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Color(0xFFC62828)),
               title: const Text('Take Photos via Camera (Front & Back)'),
-              onTap: () async {
-                Navigator.of(context).pop();
-
-                await Future.delayed(const Duration(milliseconds: 150));
-
-                if (!mounted) return;
-
-                await _openCameraCapture();
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openCameraCapture();
               },
             ),
             ListTile(
@@ -206,14 +163,9 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                 color: Color(0xFFC62828),
               ),
               title: const Text('Upload Front & Back from Gallery'),
-              onTap: () async {
-                Navigator.of(context).pop();
-
-                await Future.delayed(const Duration(milliseconds: 150));
-
-                if (!mounted) return;
-
-                await _pickBothImagesFromGallery();
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _pickBothImagesFromGallery();
               },
             ),
           ],
@@ -222,99 +174,65 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
-  // ============================================================
-  // GALLERY CONTINUE
-  // ============================================================
-
-  Future<void> _onContinuePressed(BuildContext context) async {
-    final RequestIdVerificationProvider provider = context
-        .read<RequestIdVerificationProvider>();
-
+  Future<void> _onContinuePressed() async {
+    final provider = context.read<RequestIdVerificationProvider>();
+    if (_preparing) return;
     if (!provider.isFaceVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please complete Face Verification before submitting an ID.',
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _message('Please complete face verification before submitting an ID.');
       return;
     }
-
     if (!provider.canSubmitId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            provider.verificationStatus == 'pending'
-                ? 'Your ID verification is currently pending review.'
-                : 'Your ID has already been approved.',
-          ),
-        ),
+      _message(
+        provider.hasSubmittedId
+            ? 'Your ID has already been submitted.'
+            : 'ID submission is unavailable. Please try again.',
       );
       return;
     }
-
     if (_selectedIdType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a valid ID type.')),
-      );
+      _message('Please select a valid ID type.');
+      return;
+    }
+    if (_frontIdImage == null || _backIdImage == null) {
+      _message('Please attach both front and back ID images.');
       return;
     }
 
-    if (_frontIdImage == null || _backIdImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please upload both the front and back images of your ID, or use the camera option.',
+    setState(() => _preparing = true);
+    try {
+      await provider.selectIdTypeAndSaveProfile(_selectedIdType!);
+      await provider.processIdCard(_frontIdImage!);
+      await provider.processBackIdCard(_backIdImage!);
+      if (!mounted) return;
+      if (provider.errorMessage != null) {
+        _message(provider.errorMessage!);
+        return;
+      }
+      final navigator = Navigator.of(context);
+      final result = await navigator.push<RequestIdVerificationData>(
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider.value(
+            value: provider,
+            child: const ReviewIdScreen(),
           ),
         ),
       );
-      return;
-    }
-
-    await provider.selectIdTypeAndSaveProfile(_selectedIdType!);
-
-    await provider.processIdCard(_frontIdImage!);
-
-    await provider.processBackIdCard(_backIdImage!);
-
-    if (!mounted) return;
-
-    debugPrint('');
-    debugPrint('SELECT ID: Opening ReviewIdScreen...');
-
-    final RequestIdVerificationData? result = await Navigator.of(context)
-        .push<RequestIdVerificationData>(
-          MaterialPageRoute(
-            builder: (_) => ChangeNotifierProvider.value(
-              value: provider,
-              child: const ReviewIdScreen(),
-            ),
-          ),
-        );
-
-    if (!mounted) return;
-
-    debugPrint('');
-    debugPrint('SELECT ID: ReviewIdScreen returned.');
-    debugPrint('SELECT ID: result == null = ${result == null}');
-
-    if (result != null) {
-      debugPrint('SELECT ID: Passing verification result back to parent.');
-
-      Navigator.of(context).pop<RequestIdVerificationData>(result);
+      if (!mounted) return;
+      if (result != null) navigator.pop<RequestIdVerificationData>(result);
+    } catch (error) {
+      if (!mounted) return;
+      _message('Unable to review ID images: $error');
+    } finally {
+      if (mounted) setState(() => _preparing = false);
     }
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
-
   @override
   Widget build(BuildContext context) {
-    final RequestIdVerificationProvider provider = context
-        .watch<RequestIdVerificationProvider>();
+    final provider = context.watch<RequestIdVerificationProvider>();
+    final submitted = provider.hasSubmittedId;
+    final canEdit = provider.canSubmitId && !_preparing;
+    final busy = provider.isLoading || _preparing;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -332,104 +250,139 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
         ),
         leading: Navigator.of(context).canPop()
             ? IconButton(
-                icon: const Icon(
-                  Icons.arrow_back,
-                  color: Colors.black87,
-                  size: 20,
-                ),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
+                icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                onPressed: () => Navigator.of(context).pop(),
               )
             : null,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-          child: provider.isLoading && provider.verificationStatus == null
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!provider.isFaceVerified)
-                        _buildStatusBanner(
-                          color: Colors.red,
-                          text:
-                              'Face Verification Required: You must complete face verification before you can submit an ID.',
-                        ),
-                      if (provider.isFaceVerified &&
-                          provider.verificationStatus == 'rejected')
-                        _buildStatusBanner(
-                          color: Colors.red,
-                          text:
-                              'Your previous ID submission was rejected. Please resubmit a clear, valid ID.',
-                        ),
-                      if (provider.isFaceVerified &&
-                          provider.verificationStatus == 'pending')
-                        _buildStatusBanner(
-                          color: Colors.orange,
-                          text:
-                              'Your ID verification is currently pending review. You cannot submit a new ID at this time.',
-                        ),
-                      if (provider.isFaceVerified &&
-                          provider.isAccountFullyVerified)
-                        _buildStatusBanner(
-                          color: Colors.green,
-                          text: 'Your account is fully verified and approved.',
-                        ),
-                      _buildHeaderCard(),
-                      const SizedBox(height: 16),
-                      _buildSectionTitle(
+        child: busy && provider.verificationStatus == null
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (provider.errorMessage != null)
+                      _statusBanner(provider.errorMessage!, Colors.red),
+                    if (submitted)
+                      _statusBanner(
+                        'ID Already Submitted. Your saved ID can be reused for future donor applications and blood requests. No new upload is needed.',
+                        Colors.green,
+                      )
+                    else if (!provider.isFaceVerified)
+                      _statusBanner(
+                        'Face Verification Required: Complete face verification before submitting an ID.',
+                        Colors.red,
+                      ),
+                    if (!submitted) ...[
+                      _headerCard(),
+                      const SizedBox(height: 20),
+                      const Text(
                         'Government-Issued ID *',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
                         'Select the type of ID you will upload.',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                       const SizedBox(height: 10),
-                      _buildDropdownField(provider),
+                      _dropdown(canEdit),
                       const SizedBox(height: 12),
-                      _buildUploadCard(provider),
-                      const SizedBox(height: 6),
-                      _buildSecurityNote(),
-                      const SizedBox(height: 16),
-                      _buildAcceptedIdsInfo(),
+                      _uploadCard(canEdit),
+                      const SizedBox(height: 12),
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.security_outlined,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Make sure your name, photo and ID number are clearly visible.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Accepted IDs:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'PhilID/ePhilID, Driver\'s License, UMID, PRC ID, and other government-issued photo IDs.',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
                       const SizedBox(height: 20),
-                      _buildPrivacyBadge(),
+                      _privacyNote(),
                       const SizedBox(height: 24),
-                      _buildActionButtons(provider, context),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: canEdit && !busy
+                              ? _onContinuePressed
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFC62828),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            busy
+                                ? 'Please wait...'
+                                : !provider.isFaceVerified
+                                ? 'Face Verify First'
+                                : 'Continue',
+                          ),
+                        ),
+                      ),
+                    ] else
+                      const Text(
+                        'Your ID submission is saved. Return to the donor or blood request form to continue.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                  ],
                 ),
-        ),
+              ),
       ),
     );
   }
 
-  // ============================================================
-  // STATUS BANNER
-  // ============================================================
-
-  Widget _buildStatusBanner({
-    required MaterialColor color,
-    required String text,
-  }) {
+  Widget _statusBanner(String text, MaterialColor color) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(10),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.shade50,
-        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.shade200),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(text, style: TextStyle(color: color.shade900, fontSize: 12)),
+      child: Text(text, style: TextStyle(fontSize: 12, color: color.shade900)),
     );
   }
 
-  // ============================================================
-  // HEADER
-  // ============================================================
-
-  Widget _buildHeaderCard() {
+  Widget _headerCard() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -437,42 +390,26 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.red.shade100),
       ),
-      child: Row(
+      child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.admin_panel_settings_outlined,
-              color: Color(0xFFC62828),
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
+          Icon(Icons.badge_outlined, color: Color(0xFFC62828), size: 26),
+          SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Identity Verification',
+                  'One-Time ID Submission',
                   style: TextStyle(
-                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFC62828),
                   ),
                 ),
-                SizedBox(height: 2),
+                SizedBox(height: 4),
                 Text(
-                  'To protect patients and prevent fraudulent requests, please verify your identity.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Colors.black54,
-                    height: 1.3,
-                  ),
+                  'Submit your government-issued ID once. A saved submission does not mean the ID has been authenticated or approved.',
+                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
                 ),
               ],
             ),
@@ -482,138 +419,71 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
-  // ============================================================
-  // SECTION TITLE
-  // ============================================================
-
-  Widget _buildSectionTitle(String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const CircleAvatar(
-              radius: 10,
-              backgroundColor: Color(0xFFC62828),
-              child: Text(
-                '1',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Padding(
-          padding: const EdgeInsets.only(left: 28.0),
-          child: Text(
-            subtitle,
-            style: const TextStyle(fontSize: 11.5, color: Colors.black54),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
-  // ID DROPDOWN
-  // ============================================================
-
-  Widget _buildDropdownField(RequestIdVerificationProvider provider) {
-    final bool isEnabled = provider.isFaceVerified && provider.canSubmitId;
-
+  Widget _dropdown(bool enabled) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: isEnabled ? Colors.white : Colors.grey.shade100,
+        color: enabled ? Colors.white : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _selectedIdType,
-          hint: Row(
-            children: const [
-              Icon(Icons.badge_outlined, color: Colors.grey, size: 20),
-              SizedBox(width: 10),
-              Text(
-                'Select ID Type',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-            ],
-          ),
-          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black54),
           isExpanded: true,
-          items: _acceptedIds.map((item) {
-            return DropdownMenuItem<String>(
-              value: item.title,
-              child: Row(
-                children: [
-                  Icon(item.icon, color: const Color(0xFFC62828), size: 18),
-                  const SizedBox(width: 10),
-                  Text(
-                    item.title,
-                    style: const TextStyle(fontSize: 13, color: Colors.black87),
+          hint: const Text('Select ID Type'),
+          items: _acceptedIds
+              .map(
+                (item) => DropdownMenuItem<String>(
+                  value: item.title,
+                  child: Row(
+                    children: [
+                      Icon(item.icon, color: const Color(0xFFC62828), size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }).toList(),
-          onChanged: isEnabled
-              ? (val) {
-                  setState(() {
-                    _selectedIdType = val;
-                  });
-                }
+                ),
+              )
+              .toList(),
+          onChanged: enabled
+              ? (value) => setState(() => _selectedIdType = value)
               : null,
         ),
       ),
     );
   }
 
-  // ============================================================
-  // UPLOAD CARD
-  // ============================================================
-
-  Widget _buildUploadCard(RequestIdVerificationProvider provider) {
-    final bool isEnabled = provider.isFaceVerified && provider.canSubmitId;
-
-    final bool hasBothImages = _frontIdImage != null && _backIdImage != null;
-
+  Widget _uploadCard(bool enabled) {
+    final hasBoth = _frontIdImage != null && _backIdImage != null;
     return InkWell(
-      onTap: isEnabled ? _showImageSourceActionSheet : null,
+      onTap: enabled ? _showImageSourceActionSheet : null,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isEnabled ? Colors.white : Colors.grey.shade100,
+          color: enabled ? Colors.white : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: hasBothImages ? Colors.green.shade300 : Colors.red.shade200,
+            color: hasBoth ? Colors.green.shade300 : Colors.red.shade200,
           ),
         ),
-        child: hasBothImages
+        child: hasBoth
             ? Row(
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: Image.file(
                       _frontIdImage!,
-                      width: 50,
-                      height: 50,
+                      width: 52,
+                      height: 52,
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -622,62 +492,43 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: Image.file(
                       _backIdImage!,
-                      width: 50,
-                      height: 50,
+                      width: 52,
+                      height: 52,
                       fit: BoxFit.cover,
                     ),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Front & Back Attached',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Tap to change or re-upload photos',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
-                        ),
-                      ],
+                    child: Text(
+                      'Front & Back Attached',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const Icon(Icons.check_circle, color: Colors.green),
                 ],
               )
-            : Column(
+            : const Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFEBEE),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.upload_file_outlined,
-                      color: Color(0xFFC62828),
-                      size: 28,
-                    ),
+                  Icon(
+                    Icons.upload_file_outlined,
+                    color: Color(0xFFC62828),
+                    size: 32,
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     'Upload Front and Back ID Photos',
                     style: TextStyle(
-                      fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFFC62828),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Tap to capture via camera or select both from gallery',
-                    style: TextStyle(fontSize: 10.5, color: Colors.grey),
+                  SizedBox(height: 4),
+                  Text(
+                    'Tap to capture with camera or choose from gallery',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                 ],
               ),
@@ -685,55 +536,7 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
     );
   }
 
-  // ============================================================
-  // SECURITY NOTE
-  // ============================================================
-
-  Widget _buildSecurityNote() {
-    return Row(
-      children: const [
-        Icon(Icons.security_outlined, size: 14, color: Colors.grey),
-        SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            'Make sure your name, photo, and ID number are clearly visible.',
-            style: TextStyle(fontSize: 11, color: Colors.black54),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
-  // ACCEPTED IDS
-  // ============================================================
-
-  Widget _buildAcceptedIdsInfo() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        Text(
-          'Accepted IDs:',
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        SizedBox(height: 2),
-        Text(
-          'PhilID/ePhilID, Driver\'s License, UMID, PRC ID, and other government-issued IDs.',
-          style: TextStyle(fontSize: 11, color: Colors.black54, height: 1.3),
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
-  // PRIVACY
-  // ============================================================
-
-  Widget _buildPrivacyBadge() {
+  Widget _privacyNote() {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -741,68 +544,17 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.green.shade200),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          Icon(Icons.lock_outline, color: Colors.green.shade700, size: 20),
-          const SizedBox(width: 10),
+          Icon(Icons.lock_outline, color: Colors.green),
+          SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Your Information is protected',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                    fontSize: 12,
-                  ),
-                ),
-                SizedBox(height: 1),
-                Text(
-                  'Your identity information will only be used for verification and request processing.',
-                  style: TextStyle(color: Colors.black54, fontSize: 10.5),
-                ),
-              ],
+            child: Text(
+              'Your ID images are sensitive personal information. They should be accessible only to authorized users for the intended purpose.',
+              style: TextStyle(fontSize: 11, color: Colors.black54),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // ACTION BUTTON
-  // ============================================================
-
-  Widget _buildActionButtons(
-    RequestIdVerificationProvider provider,
-    BuildContext context,
-  ) {
-    final bool canProceed = provider.isFaceVerified && provider.canSubmitId;
-
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: ElevatedButton(
-        onPressed: canProceed ? () => _onContinuePressed(context) : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFC62828),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: Text(
-          !provider.isFaceVerified
-              ? 'Face Verify First'
-              : provider.verificationStatus == 'pending'
-              ? 'Verification Pending'
-              : provider.isAccountFullyVerified
-              ? 'Verified'
-              : 'Continue',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-        ),
       ),
     );
   }

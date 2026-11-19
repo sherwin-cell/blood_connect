@@ -63,6 +63,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '394558242984',
     projectId: 'blood-connect-12ac2',
     storageBucket: 'blood-connect-12ac2.firebasestorage.app',
+    androidClientId: '394558242984-6a1gqfgrlbnjsn5b67o3p7j3s9vlhd23.apps.googleusercontent.com',
+    iosClientId: '394558242984-r6iamalofsjpj6tcidjir7v8dtitvsgu.apps.googleusercontent.com',
     iosBundleId: 'com.example.bloodConnect',
   );
   static const FirebaseOptions macos = FirebaseOptions(
@@ -71,6 +73,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '394558242984',
     projectId: 'blood-connect-12ac2',
     storageBucket: 'blood-connect-12ac2.firebasestorage.app',
+    androidClientId: '394558242984-6a1gqfgrlbnjsn5b67o3p7j3s9vlhd23.apps.googleusercontent.com',
+    iosClientId: '394558242984-r6iamalofsjpj6tcidjir7v8dtitvsgu.apps.googleusercontent.com',
     iosBundleId: 'com.example.bloodConnect',
   );
 

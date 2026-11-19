@@ -47,6 +47,7 @@ class VerificationRepositoryImpl implements IVerificationRepository {
       final idEmbedding = await faceEmbeddingService.extractEmbedding(
         idCardFace,
       );
+
       final selfieEmbedding = await faceEmbeddingService.extractEmbedding(
         selfieFace,
       );
@@ -64,7 +65,8 @@ class VerificationRepositoryImpl implements IVerificationRepository {
       );
 
       final bool passed = rawSimilarity >= _similarityPassThreshold;
-      final double matchPercentage = (rawSimilarity.clamp(0.0, 1.0)) * 100;
+
+      final double matchPercentage = rawSimilarity.clamp(0.0, 1.0) * 100;
 
       return {
         'success': true,
@@ -96,9 +98,6 @@ class VerificationRepositoryImpl implements IVerificationRepository {
     );
   }
 
-  // ==========================================
-  // NEW: Get Face Verification status check
-  // ==========================================
   @override
   Future<bool> getFaceVerificationStatus(String userId) async {
     return await firestoreService.getFaceVerificationStatus(userId);
@@ -110,10 +109,13 @@ class VerificationRepositoryImpl implements IVerificationRepository {
     String? backIdPath,
   }) async {
     final frontUrl = await cloudinaryService.uploadImage(File(frontIdPath));
+
     String? backUrl;
+
     if (backIdPath != null && backIdPath.isNotEmpty) {
       backUrl = await cloudinaryService.uploadImage(File(backIdPath));
     }
+
     return (frontUrl: frontUrl, backUrl: backUrl);
   }
 
@@ -122,19 +124,84 @@ class VerificationRepositoryImpl implements IVerificationRepository {
     return await firestoreService.getIdVerificationStatus(userId);
   }
 
+  // ==========================================
+  // ONE-TIME ID SUBMISSION
+  // ==========================================
+
   @override
   Future<String> saveOrUpdateIdSubmission({
     required String userId,
     required RequestIdVerificationData data,
   }) async {
-    if (data.frontIdImage == null || data.frontIdImage!.isEmpty) {
+    // Step 1: Check whether the user already
+    // has a saved ID submission.
+    //
+    // This also recognizes legacy records
+    // previously marked "approved".
+
+    final existingSubmission = await firestoreService
+        .getLatestSavedIdSubmissionForUser(userId);
+
+    if (existingSubmission != null) {
+      final frontUrl = existingSubmission['frontIdImageUrl'];
+
+      final backUrl = existingSubmission['backIdImageUrl'];
+
+      final hasFront = frontUrl is String && frontUrl.trim().isNotEmpty;
+
+      final hasBack = backUrl is String && backUrl.trim().isNotEmpty;
+
+      if (hasFront && hasBack) {
+        // Reuse the original submission.
+        // Do not upload images again.
+        // Do not overwrite the saved ID.
+
+        return userId;
+      }
+
+      // An incomplete record should not be
+      // silently replaced or treated as valid.
+      throw StateError(
+        'An incomplete ID submission already exists. '
+        'Please contact support.',
+      );
+    }
+
+    // Step 2: Validate the local ID images.
+
+    final frontPath = data.frontIdImage;
+    final backPath = data.backIdImage;
+
+    if (frontPath == null || frontPath.trim().isEmpty) {
       throw Exception('Front ID image is missing.');
     }
 
+    if (backPath == null || backPath.trim().isEmpty) {
+      throw Exception('Back ID image is missing.');
+    }
+
+    final frontFile = File(frontPath);
+    final backFile = File(backPath);
+
+    if (!await frontFile.exists() || await frontFile.length() == 0) {
+      throw Exception('Front ID image is invalid.');
+    }
+
+    if (!await backFile.exists() || await backFile.length() == 0) {
+      throw Exception('Back ID image is invalid.');
+    }
+
+    // Step 3: Upload only for first-time users.
+
     final uploadedUrls = await uploadRequestIdImages(
-      frontIdPath: data.frontIdImage!,
-      backIdPath: data.backIdImage,
+      frontIdPath: frontPath,
+      backIdPath: backPath,
     );
+
+    // Step 4: Save one ID record in Firestore.
+    //
+    // FirestoreService must enforce
+    // create-once behavior atomically.
 
     return await firestoreService.saveIdVerificationSubmission(
       userId: userId,

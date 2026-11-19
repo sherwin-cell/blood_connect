@@ -1,13 +1,14 @@
+﻿import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/push_notification_service.dart';
 import '../../onboarding/presentation/welcome_screen.dart';
 import '../../profile/presentation/profile_gate.dart';
 import '../../splash/presentation/splash_screen.dart';
 import 'email_verification_screen.dart';
 
-/// Single source of truth for unauthenticated → email-verified → profile routing.
-/// Uses [userChanges] so email verification after [User.reload] is observed.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -28,8 +29,10 @@ class AuthGate extends StatelessWidget {
         debugPrint('Display Name: ${user?.displayName}');
         debugPrint('================================');
 
-        // Unauthenticated → Welcome
         if (user == null) {
+          unawaited(
+            PushNotificationService.instance.clearRegisteredUser(),
+          );
           return const WelcomeScreen();
         }
 
@@ -37,13 +40,26 @@ class AuthGate extends StatelessWidget {
           (provider) => provider.providerId == 'google.com',
         );
 
-        // Email/password users must verify before continuing
         if (!isGoogleUser && !user.emailVerified) {
+          unawaited(
+            PushNotificationService.instance.clearRegisteredUser(),
+          );
           return const EmailVerificationScreen();
         }
+
+        unawaited(_registerNotifications(user.uid));
 
         return ProfileGate(user: user);
       },
     );
+  }
+
+  Future<void> _registerNotifications(String uid) async {
+    try {
+      await PushNotificationService.instance.registerTokenForUser(uid);
+    } catch (error, stackTrace) {
+      debugPrint('Notification token registration failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 }

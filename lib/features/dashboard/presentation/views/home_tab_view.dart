@@ -9,7 +9,7 @@ import '../../../donor/presentation/screens/compatible_requests_screen.dart';
 import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
 import '../../../donor/presentation/screens/matched_donors_screen.dart';
 import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
-import '../../../announcements/presentation/screens/announcements_screen.dart';
+// import '../../../announcements/presentation/screens/announcements_screen.dart';
 import '../../../verification/presentation/id_verification_flow.dart';
 import '../widgets/member_card.dart';
 
@@ -1064,19 +1064,19 @@ class HomeTabView extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(width: 8),
-        _buildInfoServiceItem(
-          Icons.campaign_outlined,
-          'Announcements',
-          onTap: () {
-            debugPrint('========== ANNOUNCEMENTS PRESSED ==========');
+        // const SizedBox(width: 8),
+        // _buildInfoServiceItem(
+        //   Icons.campaign_outlined,
+        //   'Announcements',
+        //   onTap: () {
+        //     debugPrint('========== ANNOUNCEMENTS PRESSED ==========');
 
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
-            );
-          },
-        ),
+        // Navigator.push(
+        //   context,
+        //   MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+        // );
+        //   },
+        // ),
       ],
     );
   }

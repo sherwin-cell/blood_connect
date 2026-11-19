@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 import 'core/services/firestore_service.dart';
+import 'core/services/push_notification_service.dart';
+
 import 'features/verification/domain/services/i_face_embedding_service.dart';
 import 'features/verification/data/services/tflite_face_embedding_service.dart';
 import 'features/verification/data/services/cloudinary_service.dart';
@@ -21,14 +24,24 @@ import 'features/onboarding/presentation/welcome_screen.dart';
 import 'features/splash/presentation/splash_screen.dart';
 import 'features/donor/presentation/screens/donor_pending_screen.dart';
 
+/// Application entry point.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Initialize Firebase before using Firebase services.
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Pre-initialize the TFLite interpreter
+  // 2. Register the background FCM handler before runApp().
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+  // 3. Initialize push notifications and notification listeners.
+  await PushNotificationService.instance.initialize();
+
+  // 4. Initialize the face embedding service.
   final tfliteService = TFLiteFaceEmbeddingService();
   await tfliteService.initialize();
 
+  // 5. Start the application.
   runApp(BloodConnectApp(faceEmbeddingService: tfliteService));
 }
 
@@ -41,15 +54,15 @@ class BloodConnectApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // 1. Core Services
+        // Core services.
         Provider<FirestoreService>(create: (_) => FirestoreService()),
         Provider<CloudinaryService>(create: (_) => CloudinaryService()),
         Provider<FaceDetectorService>(create: (_) => FaceDetectorService()),
 
-        // 2. Production TFLite Face Embedding Service Instance
+        // Face embedding service.
         Provider<IFaceEmbeddingService>.value(value: faceEmbeddingService),
 
-        // 3. Verification Repository Injection (4 dependencies now)
+        // Verification repository.
         ProxyProvider4<
           FaceDetectorService,
           CloudinaryService,
@@ -57,16 +70,18 @@ class BloodConnectApp extends StatelessWidget {
           IFaceEmbeddingService,
           IVerificationRepository
         >(
-          update: (_, faceDetector, cloudinary, firestore, faceEmbedding, __) =>
-              VerificationRepositoryImpl(
-                faceDetectorService: faceDetector,
-                cloudinaryService: cloudinary,
-                firestoreService: firestore,
-                faceEmbeddingService: faceEmbedding,
-              ),
+          update:
+              (context, faceDetector, cloudinary, firestore, faceEmbedding, _) {
+                return VerificationRepositoryImpl(
+                  faceDetectorService: faceDetector,
+                  cloudinaryService: cloudinary,
+                  firestoreService: firestore,
+                  faceEmbeddingService: faceEmbedding,
+                );
+              },
         ),
 
-        // 4. UI State Provider
+        // Verification state provider.
         ChangeNotifierProxyProvider<
           IVerificationRepository,
           VerificationProvider
@@ -74,8 +89,9 @@ class BloodConnectApp extends StatelessWidget {
           create: (context) => VerificationProvider(
             repository: context.read<IVerificationRepository>(),
           ),
-          update: (_, repo, previous) =>
-              previous ?? VerificationProvider(repository: repo),
+          update: (_, repository, previous) {
+            return previous ?? VerificationProvider(repository: repository);
+          },
         ),
       ],
       child: MaterialApp(
@@ -84,19 +100,20 @@ class BloodConnectApp extends StatelessWidget {
         theme: ThemeData(useMaterial3: true, fontFamily: 'Roboto'),
         home: const _AppStartupSplash(),
         routes: {
-          '/welcome': (context) => const WelcomeScreen(),
-          '/auth-gate': (context) => const AuthGate(),
-          '/login': (context) => const LoginScreen(),
-          '/register': (context) => const RegisterScreen(),
-          '/forgot-password': (context) => const ForgotPasswordScreen(),
-          '/verify-email': (context) => const EmailVerificationScreen(),
-          '/donor-pending': (context) => const DonorPendingScreen(),
+          '/welcome': (_) => const WelcomeScreen(),
+          '/auth-gate': (_) => const AuthGate(),
+          '/login': (_) => const LoginScreen(),
+          '/register': (_) => const RegisterScreen(),
+          '/forgot-password': (_) => const ForgotPasswordScreen(),
+          '/verify-email': (_) => const EmailVerificationScreen(),
+          '/donor-pending': (_) => const DonorPendingScreen(),
         },
       ),
     );
   }
 }
 
+/// Displays the startup splash screen before opening the authentication gate.
 class _AppStartupSplash extends StatefulWidget {
   const _AppStartupSplash();
 
@@ -113,7 +130,9 @@ class _AppStartupSplashState extends State<_AppStartupSplash> {
 
   Future<void> _navigateToAuthGate() async {
     await Future.delayed(const Duration(seconds: 2));
+
     if (!mounted) return;
+
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => const AuthGate()));
