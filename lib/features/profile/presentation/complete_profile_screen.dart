@@ -742,7 +742,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryRed.withOpacity(0.1),
+                        color: AppColors.primaryRed.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -767,7 +767,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withValues(alpha: 0.6),
                       ),
                     ),
                   ],
@@ -915,7 +915,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       hint: Text(
                         'Select Municipality',
                         style: GoogleFonts.inter(
-                          color: Colors.black.withOpacity(0.35),
+                          color: Colors.black.withValues(alpha: 0.35),
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -966,7 +966,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                             ? 'Select municipality first'
                             : 'Select Barangay',
                         style: GoogleFonts.inter(
-                          color: Colors.black.withOpacity(0.35),
+                          color: Colors.black.withValues(alpha: 0.35),
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1068,9 +1068,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: GoogleFonts.inter(color: Colors.black.withOpacity(0.35)),
+      hintStyle: GoogleFonts.inter(color: Colors.black.withValues(alpha: 0.35)),
       filled: true,
-      fillColor: Colors.black.withOpacity(0.04),
+      fillColor: Colors.black.withValues(alpha: 0.04),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

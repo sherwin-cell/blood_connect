@@ -316,9 +316,9 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: donorGreen.withOpacity(0.08),
+        color: donorGreen.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: donorGreen.withOpacity(0.15)),
+        border: Border.all(color: donorGreen.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [

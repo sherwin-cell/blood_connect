@@ -214,10 +214,10 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -232,7 +232,7 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryRed.withOpacity(0.1),
+                  color: AppColors.primaryRed.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(

@@ -171,7 +171,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 Container(
                   width: 1.5,
                   height: 14,
-                  color: const Color(0xFFEF9A9A).withOpacity(0.6),
+                  color: const Color(0xFFEF9A9A).withValues(alpha: 0.6),
                 ),
             ],
           ),
@@ -194,7 +194,7 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.black.withOpacity(0.55),
+                    color: Colors.black.withValues(alpha: 0.55),
                   ),
                 ),
               ],

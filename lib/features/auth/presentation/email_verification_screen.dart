@@ -161,7 +161,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 'Please verify your account before continuing, or update your email below if it was entered incorrectly.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.black.withValues(alpha: 0.6),
                   fontSize: 13,
                 ),
               ),

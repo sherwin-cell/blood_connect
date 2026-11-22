@@ -114,7 +114,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           width: 104,
                           height: 104,
                           decoration: BoxDecoration(
-                            color: AppColors.primaryRed.withOpacity(0.1),
+                            color: AppColors.primaryRed.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -140,7 +140,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           style: TextStyle(
                             fontSize: 15,
                             height: 1.5,
-                            color: Colors.black.withOpacity(0.6),
+                            color: Colors.black.withValues(alpha: 0.6),
                           ),
                         ),
                         const Spacer(flex: 3),
@@ -169,7 +169,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         decoration: BoxDecoration(
                           color: _currentPage == index
                               ? AppColors.primaryRed
-                              : Colors.black.withOpacity(0.15),
+                              : Colors.black.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -210,7 +210,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         'Already a Member? ',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.black.withOpacity(0.6),
+                          color: Colors.black.withValues(alpha: 0.6),
                         ),
                       ),
                       GestureDetector(

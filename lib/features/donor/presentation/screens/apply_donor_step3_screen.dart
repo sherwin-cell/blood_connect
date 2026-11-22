@@ -118,7 +118,7 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
         border: Border.all(
           color: answer == null
               ? Colors.grey.shade200
-              : donorGreen.withOpacity(0.25),
+              : donorGreen.withValues(alpha: 0.25),
         ),
       ),
       child: Column(
@@ -131,7 +131,7 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
                 width: 26,
                 height: 26,
                 decoration: BoxDecoration(
-                  color: donorGreen.withOpacity(0.1),
+                  color: donorGreen.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -223,7 +223,7 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
-          color: selected ? donorGreen.withOpacity(0.08) : Colors.grey.shade50,
+          color: selected ? donorGreen.withValues(alpha: 0.08) : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected ? donorGreen : Colors.grey.shade300,
@@ -284,9 +284,9 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: donorGreen.withOpacity(0.08),
+                color: donorGreen.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: donorGreen.withOpacity(0.15)),
+                border: Border.all(color: donorGreen.withValues(alpha: 0.15)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,7 +338,7 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: donorGreen.withOpacity(0.1),
+                      color: donorGreen.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(

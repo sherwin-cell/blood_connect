@@ -81,13 +81,13 @@ class NotificationsScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isRead
                       ? Colors.white
-                      : Colors.red.shade50.withOpacity(0.5),
+                      : Colors.red.shade50.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                 ),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: AppColors.primaryRed.withOpacity(0.1),
+                    backgroundColor: AppColors.primaryRed.withValues(alpha: 0.1),
                     child: const Icon(
                       Icons.notifications,
                       color: AppColors.primaryRed,

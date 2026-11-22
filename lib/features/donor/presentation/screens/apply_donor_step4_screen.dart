@@ -230,10 +230,10 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: hasId ? donorGreen.withOpacity(0.06) : Colors.grey.shade50,
+        color: hasId ? donorGreen.withValues(alpha: 0.06) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: hasId ? donorGreen.withOpacity(0.2) : Colors.grey.shade200,
+          color: hasId ? donorGreen.withValues(alpha: 0.2) : Colors.grey.shade200,
         ),
       ),
       child: Row(
@@ -243,7 +243,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: hasId ? donorGreen.withOpacity(0.1) : Colors.grey.shade200,
+              color: hasId ? donorGreen.withValues(alpha: 0.1) : Colors.grey.shade200,
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -306,7 +306,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: donorGreen.withOpacity(0.1),
+                  color: donorGreen.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -414,9 +414,9 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: donorGreen.withOpacity(0.08),
+                      color: donorGreen.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: donorGreen.withOpacity(0.15)),
+                      border: Border.all(color: donorGreen.withValues(alpha: 0.15)),
                     ),
                     child: const Row(
                       children: [
@@ -501,7 +501,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: _agreedToTerms
-                            ? donorGreen.withOpacity(0.25)
+                            ? donorGreen.withValues(alpha: 0.25)
                             : Colors.grey.shade200,
                       ),
                     ),

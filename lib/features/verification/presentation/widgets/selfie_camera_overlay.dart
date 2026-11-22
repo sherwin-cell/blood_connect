@@ -125,7 +125,7 @@ class _SelfieOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final overlayPaint = Paint()..color = Colors.black.withOpacity(0.75);
+    final overlayPaint = Paint()..color = Colors.black.withValues(alpha: 0.75);
 
     Color borderColor;
     if (isPassed) {

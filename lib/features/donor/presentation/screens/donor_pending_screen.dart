@@ -32,10 +32,10 @@ class DonorPendingScreen extends StatelessWidget {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  color: donorGreen.withOpacity(0.1),
+                  color: donorGreen.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: donorGreen.withOpacity(0.2),
+                    color: donorGreen.withValues(alpha: 0.2),
                     width: 2,
                   ),
                 ),
@@ -117,7 +117,7 @@ class DonorPendingScreen extends StatelessWidget {
                   border: Border.all(color: Colors.grey.shade200),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),

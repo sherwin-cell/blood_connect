@@ -45,7 +45,7 @@ class MatchedDonorsScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
             ),
             child: Row(
               children: [
@@ -230,7 +230,7 @@ class MatchedDonorsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
       ),
       child: Row(
         children: [
@@ -286,7 +286,7 @@ class MatchedDonorsScreen extends StatelessWidget {
                   ),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.primaryRed,
-              side: BorderSide(color: AppColors.primaryRed.withOpacity(0.5)),
+              side: BorderSide(color: AppColors.primaryRed.withValues(alpha: 0.5)),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),

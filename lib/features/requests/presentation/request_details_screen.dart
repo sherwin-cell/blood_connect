@@ -168,7 +168,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black.withOpacity(0.05)),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
               ),
               child: Row(
                 children: [
@@ -176,7 +176,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryRed.withOpacity(0.1),
+                      color: AppColors.primaryRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Center(
