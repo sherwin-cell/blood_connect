@@ -17,6 +17,37 @@ service cloud.firestore {
         && request.auth.uid == userId;
     }
 
+    // Owner of an existing blood request (supports both owner fields).
+    function isRequestOwner(requestData) {
+      return isAuthenticated() && (
+        requestData.get('userId', '') == request.auth.uid
+        ||
+        requestData.get('requesterId', '') == request.auth.uid
+      );
+    }
+
+    // Request statuses the requester may still cancel from.
+    // Keep in sync with RequestStatus.inProgress in the app.
+    function cancellableRequestStatuses() {
+      return ['pending', 'approved', 'active', 'matched'];
+    }
+
+    // Offer statuses the donor may still withdraw from.
+    // Keep in sync with OfferStatus.active in the app.
+    function withdrawableOfferStatuses() {
+      return ['pending', 'approved', 'accepted'];
+    }
+
+    // An approved donor whom PRC marked available for donation.
+    function isEligibleDonor() {
+      let donorPath =
+        /databases/$(database)/documents/donors/$(request.auth.uid);
+      return isAuthenticated()
+        && exists(donorPath)
+        && get(donorPath).data.get('donorStatus', '') == 'approved'
+        && get(donorPath).data.get('isAvailableForDonation', false) == true;
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.get('admin', false) == true
@@ -279,14 +310,25 @@ service cloud.firestore {
 
       // PRC administrators may manage request statuses.
       // Request owners may edit ordinary request fields
-      // but cannot change ownership or status directly.
+      // but cannot change ownership or status directly,
+      // except to cancel a request that is still in progress.
       allow update: if isAdmin() || (
-        isAuthenticated()
-        && (
-          resource.data.get('userId', '') == request.auth.uid
-          ||
-          resource.data.get('requesterId', '') == request.auth.uid
-        )
+        isRequestOwner(resource.data)
+        && resource.data.get('status', '') in cancellableRequestStatuses()
+        && request.resource.data.get('status', '') == 'cancelled'
+        && request.resource.data.get('cancelledBy', '') == request.auth.uid
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'status',
+            'cancelledAt',
+            'cancelledBy',
+            'cancellationReason',
+            'updatedAt'
+          ])
+      ) || (
+        isRequestOwner(resource.data)
         && request.resource.data.get(
           'userId', ''
         ) == resource.data.get('userId', '')
@@ -301,7 +343,9 @@ service cloud.firestore {
             'fulfilledAt',
             'fulfilledBy',
             'reviewedBy',
-            'reviewedAt'
+            'reviewedAt',
+            'cancelledAt',
+            'cancelledBy'
           ])
       );
 
@@ -329,11 +373,28 @@ service cloud.firestore {
             ).data.get('requesterId', '') == request.auth.uid
           );
 
-        allow create: if isAuthenticated()
+        // Only an approved, available donor may offer, and only on a
+        // request PRC has opened to donors.
+        allow create: if isEligibleDonor()
           && request.resource.data.get('donorId', '') == request.auth.uid
-          && request.resource.data.get('status', 'pending') == 'pending';
+          && request.resource.data.get('status', 'pending') == 'pending'
+          && request.resource.data.get('requestId', requestId) == requestId
+          && get(
+            /databases/$(database)/documents/blood_requests/$(requestId)
+          ).data.get('status', '') in ['active', 'approved'];
 
+        // PRC confirms, rejects or completes offers. The donor may edit
+        // ordinary fields, or withdraw an offer that is still active.
         allow update: if isAdmin() || (
+          isAuthenticated()
+          && resource.data.get('donorId', '') == request.auth.uid
+          && resource.data.get('status', '') in withdrawableOfferStatuses()
+          && request.resource.data.get('status', '') == 'withdrawn'
+          && request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasOnly(['status', 'withdrawnAt', 'updatedAt'])
+        ) || (
           isAuthenticated()
           && resource.data.get('donorId', '') == request.auth.uid
           && request.resource.data.get(
@@ -536,6 +597,32 @@ service cloud.firestore {
     match /request_summaries/{requestId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+
+      // The requester closes the summary when they cancel their request.
+      allow update: if isRequestOwner(
+          get(
+            /databases/$(database)/documents/blood_requests/$(requestId)
+          ).data
+        )
+        && request.resource.data.get('status', '') == 'cancelled'
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['status', 'updatedAt']);
+    }
+
+    // ============================================================
+    // 11b. DONOR'S OWN OFFERS (collection-group query)
+    // ============================================================
+    // Lets a donor list their offers across all requests with
+    // collectionGroup('offers').where('donorId', '==', uid).
+
+    match /{path=**}/offers/{offerId} {
+      allow read: if isAuthenticated() && (
+        isAdmin()
+        ||
+        resource.data.get('donorId', '') == request.auth.uid
+      );
     }
 
     // ============================================================

@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import './post_request_step3_screen.dart';
@@ -34,6 +35,8 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
   bool _anyBloodType = false;
   String? _selectedUnits;
   String? _selectedComponent = 'Whole Blood';
+  String _urgency = RequestUrgency.normal;
+  DateTime? _neededByDate;
   final _hemoglobinController = TextEditingController();
   final _notesController = TextEditingController();
 
@@ -82,6 +85,15 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
       );
       return;
     }
+    if (_neededByDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select the date the blood is needed by'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     Navigator.push(
       context,
@@ -98,12 +110,26 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
           unitsRequired: int.tryParse(_selectedUnits!.replaceAll('+', '')) ?? 1,
           component: _selectedComponent ?? 'Whole Blood',
           hemoglobin: _hemoglobinController.text.trim(),
-          urgency: RequestUrgency.urgent,
-          neededByDate: DateTime.now().add(const Duration(days: 1)),
+          urgency: _urgency,
+          neededByDate: _neededByDate!,
           notes: _notesController.text.trim(),
         ),
       ),
     );
+  }
+
+  Future<void> _pickNeededByDate() async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _neededByDate ?? today,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 90)),
+      helpText: 'Blood needed by',
+    );
+    if (picked != null) {
+      setState(() => _neededByDate = picked);
+    }
   }
 
   @override
@@ -317,6 +343,67 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                       decoration: _inputDecoration(
                         'Latest Hemoglobin / Hematocrit (e.g., 9.5 g/dL)',
                         Icons.medical_services_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 5. Urgency
+                    const Text(
+                      'Urgency',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: RequestUrgency.normal,
+                            label: Text('Normal'),
+                            icon: Icon(Icons.schedule),
+                          ),
+                          ButtonSegment(
+                            value: RequestUrgency.urgent,
+                            label: Text('Urgent'),
+                            icon: Icon(Icons.priority_high),
+                          ),
+                        ],
+                        selected: {_urgency},
+                        onSelectionChanged: (selection) =>
+                            setState(() => _urgency = selection.first),
+                        style: SegmentedButton.styleFrom(
+                          selectedBackgroundColor: Colors.red.shade50,
+                          selectedForegroundColor: AppColors.primaryRed,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 6. Needed by date
+                    InkWell(
+                      onTap: _pickNeededByDate,
+                      borderRadius: BorderRadius.circular(8),
+                      child: InputDecorator(
+                        decoration: _inputDecoration(
+                          'Needed By',
+                          Icons.event_outlined,
+                        ),
+                        child: Text(
+                          _neededByDate == null
+                              ? 'Select date'
+                              : DateFormat(
+                                  'MMM d, yyyy',
+                                ).format(_neededByDate!),
+                          style: TextStyle(
+                            color: _neededByDate == null
+                                ? Colors.grey.shade600
+                                : Colors.black87,
+                          ),
+                        ),
                       ),
                     ),
                   ],

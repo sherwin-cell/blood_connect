@@ -118,6 +118,25 @@ class DonorRepositoryImpl {
       throw Exception('Missing donor blood type.');
     }
 
+    // --------------------------------------------------------------
+    // VERIFY DONOR ELIGIBILITY (set by PRC after each donation)
+    // --------------------------------------------------------------
+
+    final donorSnapshot = await _firestore
+        .collection('donors')
+        .doc(donorId)
+        .get();
+    final donorData = donorSnapshot.data();
+
+    if (donorData == null) {
+      throw Exception('Your donor record could not be found.');
+    }
+
+    final blockingReason = DonorEligibility.blockingReason(donorData);
+    if (blockingReason != null) {
+      throw Exception(blockingReason);
+    }
+
     final requestRef = _firestore.collection('blood_requests').doc(requestId);
 
     // --------------------------------------------------------------
@@ -185,13 +204,85 @@ class DonorRepositoryImpl {
     // CREATE OFFER
     // --------------------------------------------------------------
 
+    // Request details are copied onto the offer so the donor's
+    // "My offers" list can show them without reading every request.
     await offersRef.add({
+      'requestId': requestId,
+      'requesterId': requestData['requesterId'] ?? requestData['userId'],
       'donorId': donorId,
       'donorName': donorName.trim(),
       'donorContact': donorContact.trim(),
       'donorBloodType': normalizedDonorBloodType,
+      'requestBloodType': requestBloodType,
+      'component': requestData['component'],
+      'urgency': requestData['urgency'],
+      'neededByDate': requestData['neededByDate'],
+      'hospitalName': requestData['hospitalName'],
       'status': OfferStatus.pending,
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  // ================================================================
+  // WITHDRAW OFFER
+  // ================================================================
+
+  /// Lets a donor withdraw an offer that PRC has not completed yet.
+  /// The offer is kept (not deleted) so PRC can see the history.
+  Future<void> withdrawOffer({
+    required String requestId,
+    required String offerId,
+  }) async {
+    final offerRef = _firestore
+        .collection('blood_requests')
+        .doc(requestId)
+        .collection('offers')
+        .doc(offerId);
+
+    await _firestore.runTransaction((tx) async {
+      final snapshot = await tx.get(offerRef);
+      final status = snapshot.data()?['status']?.toString();
+
+      if (!snapshot.exists) {
+        throw Exception('This offer no longer exists.');
+      }
+      if (!OfferStatus.isActive(status)) {
+        throw Exception('This offer can no longer be withdrawn.');
+      }
+
+      tx.update(offerRef, {
+        'status': OfferStatus.withdrawn,
+        'withdrawnAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  // ================================================================
+  // DONOR -> MY OFFERS
+  // ================================================================
+
+  /// All offers made by [donorId], newest first.
+  ///
+  /// Uses a collection-group query on `offers`; sorted on the client so
+  /// only the single-field `donorId` collection-group index is needed.
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> streamMyOffers(
+    String donorId,
+  ) {
+    return _firestore
+        .collectionGroup('offers')
+        .where('donorId', isEqualTo: donorId)
+        .snapshots()
+        .map((snapshot) {
+          final docs = snapshot.docs.toList();
+          docs.sort((a, b) {
+            final at = a.data()['createdAt'];
+            final bt = b.data()['createdAt'];
+            if (at is! Timestamp) return -1;
+            if (bt is! Timestamp) return 1;
+            return bt.compareTo(at);
+          });
+          return docs;
+        });
   }
 }

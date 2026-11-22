@@ -5,7 +5,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/services/firestore_service.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
+import '../widgets/blood_request_card.dart';
+import '../widgets/my_offers_section.dart';
 import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
 import '../../../requests/presentation/request_rejection_screen.dart';
 import '../../../../core/constants/statuses.dart';
@@ -53,27 +54,19 @@ class ActivityTabView extends StatelessWidget {
               );
             }
             return Column(
-              children: docs.map((doc) {
-                final data = doc.data();
-                return _RequestActivityTile(
-                  title: 'Blood request for ${data['bloodType'] ?? '—'}',
-                  status: (data['status'] as String? ?? RequestStatus.pending)
-                      .toLowerCase(),
-                  rejectionReason:
-                      data['rejectionReason'] as String? ??
-                      data['adminNotes'] as String?,
-                  onResubmit: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const PostBloodRequestWelcomeScreen(),
-                      ),
-                    );
-                  },
-                );
-              }).toList(),
+              children: docs
+                  .map(
+                    (doc) => BloodRequestCard(
+                      requestId: doc.id,
+                      data: doc.data(),
+                      userId: user.uid,
+                    ),
+                  )
+                  .toList(),
             );
           },
         ),
+        MyOffersSection(donorId: user.uid),
         const SizedBox(height: 24),
         const Text(
           'Donor application',

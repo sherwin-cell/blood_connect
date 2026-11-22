@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -30,9 +30,7 @@ class AuthGate extends StatelessWidget {
         debugPrint('================================');
 
         if (user == null) {
-          unawaited(
-            PushNotificationService.instance.clearRegisteredUser(),
-          );
+          unawaited(PushNotificationService.instance.clearRegisteredUser());
           return const WelcomeScreen();
         }
 
@@ -41,9 +39,7 @@ class AuthGate extends StatelessWidget {
         );
 
         if (!isGoogleUser && !user.emailVerified) {
-          unawaited(
-            PushNotificationService.instance.clearRegisteredUser(),
-          );
+          unawaited(PushNotificationService.instance.clearRegisteredUser());
           return const EmailVerificationScreen();
         }
 

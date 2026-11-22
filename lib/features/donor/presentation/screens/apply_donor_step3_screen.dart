@@ -223,7 +223,9 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
-          color: selected ? donorGreen.withValues(alpha: 0.08) : Colors.grey.shade50,
+          color: selected
+              ? donorGreen.withValues(alpha: 0.08)
+              : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected ? donorGreen : Colors.grey.shade300,
