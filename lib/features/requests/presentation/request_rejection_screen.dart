@@ -7,11 +7,16 @@ class RequestRejectionScreen extends StatelessWidget {
   final String reason;
   final VoidCallback onResubmit;
 
+  /// When false (PRC set "Reapplication Allowed: No"), the resubmit
+  /// button is hidden and a notice is shown instead.
+  final bool canResubmit;
+
   const RequestRejectionScreen({
     super.key,
     required this.title,
     required this.reason,
     required this.onResubmit,
+    this.canResubmit = true,
   });
 
   @override
@@ -83,28 +88,41 @@ class RequestRejectionScreen extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    onResubmit();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryRed,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    'Correct and resubmit',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              if (!canResubmit)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'PRC has not allowed reapplication for this application. '
+                    'Please contact PRC through Chat with PRC if you have questions.',
+                    style: TextStyle(fontSize: 13, color: Colors.black54),
                   ),
                 ),
-              ),
+              if (canResubmit)
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onResubmit();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryRed,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Correct and resubmit',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 12),
             ],
           ),

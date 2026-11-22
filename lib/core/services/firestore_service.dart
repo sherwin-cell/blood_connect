@@ -373,6 +373,10 @@ class FirestoreService {
     };
 
     if (docId != null) {
+      if (collection == 'donors') {
+        return _submitDonorApplication(docId: docId, data: data);
+      }
+
       await _firestore
           .collection(collection)
           .doc(docId)
@@ -386,6 +390,71 @@ class FirestoreService {
     final ref = await _firestore.collection(collection).add(data);
 
     return ref.id;
+  }
+
+  /// Submits a donor application.
+  ///
+  /// donors/{uid} always holds the Current Application and every
+  /// submission gets a new, unique applicationId. A user may submit again
+  /// only if PRC rejected the current application and set
+  /// reapplicationAllowed = true. The previous application is copied to
+  /// donors/{uid}/application_history/{applicationId} and is never deleted.
+  Future<String> _submitDonorApplication({
+    required String docId,
+    required Map<String, dynamic> data,
+  }) async {
+    final donorRef = _firestore.collection('donors').doc(docId);
+    final historyRef = donorRef.collection('application_history');
+    final newApplicationId = _firestore.collection('donors').doc().id;
+
+    await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(donorRef);
+
+      final newData = <String, dynamic>{
+        ...data,
+        'applicationId': newApplicationId,
+        'applicationStatus': 'pending',
+        'donorStatus': 'pending',
+        'status': 'pending',
+      };
+
+      final old = existing.data();
+
+      if (existing.exists && old != null) {
+        final oldStatus =
+            (old['applicationStatus'] ?? old['donorStatus'] ?? old['status'])
+                .toString()
+                .trim()
+                .toLowerCase();
+
+        if (oldStatus != 'rejected' || old['reapplicationAllowed'] != true) {
+          throw Exception(
+            'You already have a donor application. You can apply again '
+            'only if PRC rejected it and allowed reapplication.',
+          );
+        }
+
+        final oldIdRaw = (old['applicationId'] ?? '').toString().trim();
+        final oldApplicationId = oldIdRaw.isNotEmpty
+            ? oldIdRaw
+            : historyRef.doc().id;
+
+        transaction.set(historyRef.doc(oldApplicationId), {
+          ...old,
+          'applicationId': oldApplicationId,
+          'archivedAt': FieldValue.serverTimestamp(),
+        });
+
+        newData['createdAt'] = old['createdAt'] ?? FieldValue.serverTimestamp();
+      } else {
+        newData['createdAt'] = FieldValue.serverTimestamp();
+      }
+
+      // Replace (not merge) so no review fields carry over.
+      transaction.set(donorRef, newData);
+    });
+
+    return docId;
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getUserBloodRequests(

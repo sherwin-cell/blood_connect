@@ -662,7 +662,7 @@ class HomeTabView extends StatelessWidget {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('blood_requests')
           .where('userId', isEqualTo: user.uid)
-          .where('status', isEqualTo: 'approved')
+          .where('status', whereIn: ['active', 'approved'])
           .get();
 
       if (!context.mounted) {

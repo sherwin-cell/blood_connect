@@ -116,14 +116,17 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
         'requestType': 'donor_application',
         ...widget.personalData,
         'bloodType': widget.bloodType,
-        'isAvailableForDonation': widget.isAvailable,
-        'lastDonationDate': widget.lastDonationDate != null
+        // Applicant-reported values. PRC-controlled fields such as
+        // isAvailableForDonation and lastDonationDate are set only by PRC.
+        'selfReportedAvailable': widget.isAvailable,
+        'selfReportedLastDonationDate': widget.lastDonationDate != null
             ? Timestamp.fromDate(widget.lastDonationDate!)
             : null,
         'eligibilityAnswers': widget.eligibilityAnswers.map(
           (k, v) => MapEntry(k.toString(), v),
         ),
         'donorStatus': 'pending',
+        'applicationStatus': 'pending',
         'frontIdImageUrl': _frontIdImageUrl ?? '',
         'backIdImageUrl': _backIdImageUrl ?? '',
         'appliedForDonorAt': FieldValue.serverTimestamp(),

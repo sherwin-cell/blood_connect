@@ -76,6 +76,54 @@ service cloud.firestore {
       ];
     }
 
+    // A newly submitted donor application: always pending, never
+    // pre-approved, activated, screened, or available for matching.
+    function validNewDonorApplication(donorId) {
+      return isOwner(donorId)
+        && request.resource.data.get('userId', donorId) == donorId
+        && request.resource.data.get('donorStatus', 'pending')
+           in ['pending', 'unverified', null]
+        && request.resource.data.get('applicationStatus', 'pending')
+           == 'pending'
+        && request.resource.data.get('verified', false) == false
+        && request.resource.data.get('isDonor', false) == false
+        && request.resource.data.get(
+          'isAvailableForDonation', false
+        ) == false
+        && !request.resource.data.keys().hasAny([
+          'reviewEventId',
+          'reviewedBy',
+          'reviewedAt',
+          'rejectionReason',
+
+          'donorActivationStatus',
+          'activatedAt',
+          'activatedBy',
+
+          'appointment',
+          'appointmentStatus',
+          'appointmentScheduledAt',
+          'appointmentScheduledBy',
+          'appointmentUpdatedAt',
+          'appointmentUpdatedBy',
+
+          'screening',
+          'screeningStatus',
+          'collection',
+          'collectionStatus',
+
+          'lastDonationDate',
+          'nextEligibleDonationDate',
+          'donationIntervalMonths',
+
+          'donationAvailabilityStatus',
+          'availabilityReview',
+
+          'archivedAt',
+          'archivedBy'
+        ]);
+    }
+
     // ============================================================
     // 2. USERS
     // ============================================================
@@ -200,45 +248,11 @@ service cloud.firestore {
     }
 
     // ============================================================
-    // 4. LEGACY VERIFICATIONS
+    // 4-5. LEGACY `verifications` / `verificationRequests`
     // ============================================================
-
-    match /verifications/{docId} {
-
-      // Existing legacy records remain readable.
-      // New writes are restricted to administrators
-      // to avoid bypassing the UID-based submission flow.
-      allow read: if isAdmin() || (
-        isAuthenticated()
-        && resource.data.get('userId', '') == request.auth.uid
-      );
-
-      allow create, update, delete: if isAdmin();
-    }
-
-    // ============================================================
-    // 5. ADMIN VERIFICATION REQUESTS
-    // ============================================================
-
-    match /verificationRequests/{docId} {
-
-      allow create: if isAuthenticated()
-        && request.resource.data.get('userId', '') == request.auth.uid
-        && request.resource.data.get('status', 'pending') == 'pending'
-        && !request.resource.data.keys().hasAny([
-          'reviewedBy',
-          'reviewedAt',
-          'approvedAt',
-          'approvedBy'
-        ]);
-
-      allow read: if isAdmin() || (
-        isAuthenticated()
-        && resource.data.get('userId', '') == request.auth.uid
-      );
-
-      allow update, delete: if isAdmin();
-    }
+    // Removed. Identity data lives in id_verifications (and the
+    // faceVerification map on users). The backend uses the Admin SDK,
+    // which bypasses these rules.
 
     // ============================================================
     // 6. BLOOD REQUESTS AND OFFERS
@@ -255,8 +269,7 @@ service cloud.firestore {
           ||
           request.resource.data.get('requesterId', '') == request.auth.uid
         )
-        && request.resource.data.get('status', 'pending')
-           in ['pending', 'active']
+        && request.resource.data.get('status', 'pending') == 'pending'
         && !request.resource.data.keys().hasAny([
           'fulfilledAt',
           'fulfilledBy',
@@ -292,14 +305,8 @@ service cloud.firestore {
           ])
       );
 
-      allow delete: if isAdmin() || (
-        isAuthenticated()
-        && (
-          resource.data.get('userId', '') == request.auth.uid
-          ||
-          resource.data.get('requesterId', '') == request.auth.uid
-        )
-      );
+      // Requests are kept for history; only PRC may delete them.
+      allow delete: if isAdmin();
 
       // ------------------------------------------------------------
       // DONOR OFFERS
@@ -359,54 +366,16 @@ service cloud.firestore {
       // Users may submit their own applications.
       // They cannot create pre-approved, activated,
       // screened, or available donor records.
-      allow create: if isOwner(donorId)
-        && request.resource.data.get('userId', donorId) == donorId
-        && request.resource.data.get('donorStatus', 'pending')
-           in ['pending', 'unverified', null]
-        && request.resource.data.get('applicationStatus', 'pending')
-           == 'pending'
-        && request.resource.data.get('verified', false) == false
-        && request.resource.data.get('isDonor', false) == false
-        && request.resource.data.get(
-          'isAvailableForDonation', false
-        ) == false
-        && !request.resource.data.keys().hasAny([
-          'reviewEventId',
-          'reviewedBy',
-          'reviewedAt',
-          'rejectionReason',
-
-          'donorActivationStatus',
-          'activatedAt',
-          'activatedBy',
-
-          'appointment',
-          'appointmentStatus',
-          'appointmentScheduledAt',
-          'appointmentScheduledBy',
-          'appointmentUpdatedAt',
-          'appointmentUpdatedBy',
-
-          'screening',
-          'screeningStatus',
-          'collection',
-          'collectionStatus',
-
-          'lastDonationDate',
-          'nextEligibleDonationDate',
-          'donationIntervalMonths',
-
-          'donationAvailabilityStatus',
-          'availabilityReview',
-
-          'archivedAt',
-          'archivedBy'
-        ]);
+      allow create: if validNewDonorApplication(donorId);
 
       // PRC administrators can manage donor records.
       //
       // Ordinary donors may update only fields outside
       // the administrative protection list.
+      //
+      // A rejected applicant may submit a NEW application only when
+      // PRC set reapplicationAllowed = true. The new application must be
+      // pending, carry a new applicationId, and contain no review fields.
       allow update: if isAdmin() || (
         isOwner(donorId)
         && request.resource.data.get(
@@ -416,9 +385,41 @@ service cloud.firestore {
           .diff(resource.data)
           .affectedKeys()
           .hasAny(donorAdminFields())
+      ) || (
+        validNewDonorApplication(donorId)
+        && resource.data.get('applicationStatus',
+             resource.data.get('donorStatus', '')) == 'rejected'
+        && resource.data.get('reapplicationAllowed', false) == true
+        && request.resource.data.get('applicationId', '') is string
+        && request.resource.data.get('applicationId', '') != ''
+        && request.resource.data.get('applicationId', '')
+           != resource.data.get('applicationId', '')
       );
 
       allow delete: if isAdmin();
+
+      // ------------------------------------------------------------
+      // APPLICATION HISTORY (previous donor applications, never deleted)
+      // ------------------------------------------------------------
+
+      match /application_history/{applicationId} {
+        allow read: if isAdmin() || isOwner(donorId);
+
+        // Created by the applicant when resubmitting after a rejection
+        // that PRC marked as reapplication allowed.
+        allow create: if isOwner(donorId)
+          && get(
+            /databases/$(database)/documents/donors/$(donorId)
+          ).data.get('reapplicationAllowed', false) == true
+          && get(
+            /databases/$(database)/documents/donors/$(donorId)
+          ).data.get('applicationStatus',
+            get(
+              /databases/$(database)/documents/donors/$(donorId)
+            ).data.get('donorStatus', '')) == 'rejected';
+
+        allow update, delete: if false;
+      }
 
       // ------------------------------------------------------------
       // NOTIFICATION EVENTS
@@ -504,7 +505,41 @@ service cloud.firestore {
     }
 
     // ============================================================
-    // 10. ANNOUNCEMENTS
+    // 10. NOTIFICATIONS (stored in-app notification records)
+    // ============================================================
+    // Written by PRC (admin) or the trusted backend (Admin SDK).
+    // A user reads and marks only their own notifications as read.
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated()
+        && (isAdmin() || resource.data.get('userId', '') == request.auth.uid);
+
+      allow create: if isAdmin();
+
+      allow update: if isAuthenticated()
+        && resource.data.get('userId', '') == request.auth.uid
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['isRead', 'readAt']);
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // 11. REQUEST SUMMARIES (anonymized view shown to donors)
+    // ============================================================
+    // Contains no patient identity, requester contact details or Blood
+    // Request Form. Written only by PRC when a request is approved
+    // (status = active) and kept in sync with the request status.
+
+    match /request_summaries/{requestId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ============================================================
+    // 12. ANNOUNCEMENTS
     // ============================================================
 
     match /announcements/{announcementId} {

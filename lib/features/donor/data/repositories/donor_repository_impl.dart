@@ -19,7 +19,7 @@ class DonorRepositoryImpl {
   ///     AB- donor -> AB- requests only
   ///
   /// The Firestore query filters only by bloodType.
-  /// The screen filters status == "approved".
+  /// The screen filters status == "active" (legacy "approved" accepted).
   ///
   /// We intentionally keep status filtering outside the query
   /// to avoid requiring a composite Firestore index.
@@ -85,7 +85,7 @@ class DonorRepositoryImpl {
   // OFFER TO DONATE
   // ================================================================
 
-  /// Creates an offer from an approved donor for an approved
+  /// Creates an offer from an approved donor for an active
   /// blood request.
   ///
   /// The caller is responsible for making sure:
@@ -140,7 +140,7 @@ class DonorRepositoryImpl {
         .trim()
         .toLowerCase();
 
-    if (requestStatus != 'approved') {
+    if (requestStatus != 'active' && requestStatus != 'approved') {
       throw Exception(
         'This blood request is no longer available for donation offers.',
       );

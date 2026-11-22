@@ -185,11 +185,11 @@ class _DonorRequestFeedScreenState extends State<DonorRequestFeedScreen> {
 
           // Matching requirements:
           //
-          // 1. Request must be approved.
+          // 1. Request must be active (legacy 'approved' still accepted).
           // 2. Request must belong to another user.
           // 3. Blood type must exactly match the donor's
           //    blood type.
-          return requestStatus == 'approved' &&
+          return (requestStatus == 'active' || requestStatus == 'approved') &&
               requestUserId != currentUserId &&
               requestBloodType == donorBloodType;
         }).toList();

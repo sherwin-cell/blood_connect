@@ -110,6 +110,8 @@ class ActivityTabView extends StatelessWidget {
               rejectionReason:
                   data['rejectionReason'] as String? ??
                   data['adminNotes'] as String?,
+              // PRC decides whether a rejected applicant may apply again.
+              canResubmit: data['reapplicationAllowed'] == true,
               onResubmit: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -130,12 +132,14 @@ class _RequestActivityTile extends StatelessWidget {
   final String status;
   final String? rejectionReason;
   final VoidCallback onResubmit;
+  final bool canResubmit;
 
   const _RequestActivityTile({
     required this.title,
     required this.status,
     required this.rejectionReason,
     required this.onResubmit,
+    this.canResubmit = true,
   });
 
   Color get _statusColor {
@@ -174,6 +178,7 @@ class _RequestActivityTile extends StatelessWidget {
                           rejectionReason ??
                           'No specific notes provided by the administrator.',
                       onResubmit: onResubmit,
+                      canResubmit: canResubmit,
                     ),
                   ),
                 );

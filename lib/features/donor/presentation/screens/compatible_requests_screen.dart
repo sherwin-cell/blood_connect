@@ -257,7 +257,7 @@ class _CompatibleRequestsScreenState extends State<CompatibleRequestsScreen> {
                 // A request is displayed only when:
                 //
                 // 1. It is not the current user's own request.
-                // 2. Status is APPROVED.
+                // 2. Status is ACTIVE (legacy 'approved' still accepted).
                 // 3. Blood type exactly matches the donor.
                 //
                 // Examples:
@@ -295,7 +295,7 @@ class _CompatibleRequestsScreenState extends State<CompatibleRequestsScreen> {
                       .trim()
                       .toLowerCase();
 
-                  if (status != 'approved') {
+                  if (status != 'active' && status != 'approved') {
                     return false;
                   }
 
