@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Node (Firestore rules tests / functions)
+node_modules/
+**/node_modules/
+
+# Logs and scratch output
+*.log
+temp_*.txt
+analysis.txt
