@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
+import '../../../core/services/notification_router.dart';
+import 'widgets/notification_bell_button.dart';
 import '../../profile/domain/user_profile_model.dart';
 import '../../profile/presentation/profile_menu_screen.dart';
 import 'views/home_tab_view.dart';
@@ -19,7 +21,32 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> {
   final FirestoreService _firestoreService = FirestoreService();
+  final NotificationRouter _router = NotificationRouter.instance;
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _router.requestedTab.addListener(_onTabRequested);
+    // Open a notification that was tapped while the app was starting.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _router.dashboardReady();
+    });
+  }
+
+  @override
+  void dispose() {
+    _router.requestedTab.removeListener(_onTabRequested);
+    _router.dashboardClosed();
+    super.dispose();
+  }
+
+  void _onTabRequested() {
+    final tab = _router.requestedTab.value;
+    if (tab == null || !mounted) return;
+    setState(() => _selectedIndex = tab);
+    _router.requestedTab.value = null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,17 +88,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ),
             ),
             actions: [
-              IconButton(
-                icon: const Icon(
-                  Icons.notifications_none_rounded,
-                  color: Colors.black87,
-                ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No new notifications')),
-                  );
-                },
-              ),
+              NotificationBellButton(userId: user.uid),
               // Stream raw user document snapshot to safely extract selfieImageUrl from faceVerification map
               StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance

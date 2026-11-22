@@ -10,9 +10,16 @@ import 'activity_helpers.dart';
 /// action while PRC has not completed them. Renders nothing when the user
 /// has made no offers.
 class MyOffersSection extends StatefulWidget {
-  const MyOffersSection({super.key, required this.donorId});
+  const MyOffersSection({
+    super.key,
+    required this.donorId,
+    this.showWhenEmpty = false,
+  });
 
   final String donorId;
+
+  /// Show an empty-state message instead of hiding the section.
+  final bool showWhenEmpty;
 
   @override
   State<MyOffersSection> createState() => _MyOffersSectionState();
@@ -72,7 +79,20 @@ class _MyOffersSectionState extends State<MyOffersSection> {
           debugPrint('My offers failed to load: ${snapshot.error}');
         }
         final offers = snapshot.data ?? const [];
-        if (offers.isEmpty) return const SizedBox.shrink();
+        if (offers.isEmpty) {
+          if (!widget.showWhenEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 48),
+            child: Center(
+              child: Text(
+                snapshot.connectionState == ConnectionState.waiting
+                    ? 'Loading your offers...'
+                    : 'You have not offered to donate yet.',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+          );
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

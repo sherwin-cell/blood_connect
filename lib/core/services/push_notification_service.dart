@@ -9,15 +9,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../firebase_options.dart';
+import 'notification_router.dart';
 
 /// Handles FCM permissions, device tokens, and incoming push notifications.
 ///
-/// A trusted server/backend is still required to send automatic notifications
-/// when PRC updates Firestore.
+/// Notifications are sent by the notification worker in
+/// blood_connect_backend, which reads the tokens saved here.
 class PushNotificationService {
   PushNotificationService._();
 
   static final PushNotificationService instance = PushNotificationService._();
+
+  /// FCM topic for PRC announcements; must match the backend.
+  static const announcementsTopic = 'announcements';
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
@@ -69,6 +73,8 @@ class PushNotificationService {
 
     // Request notification permission.
     await _messaging.requestPermission(alert: true, badge: true, sound: true);
+
+    unawaited(_subscribeToAnnouncements());
 
     // Show notifications received while the app is open.
     _foregroundSubscription ??= FirebaseMessaging.onMessage.listen((message) {
@@ -182,12 +188,31 @@ class PushNotificationService {
 
   /// Handles a notification tapped from the system notification tray.
   void _handleMessageTap(RemoteMessage message) {
-    _handleNotificationTap(jsonEncode(message.data));
+    unawaited(NotificationRouter.instance.open(message.data));
   }
 
-  /// Notification navigation can be connected here later.
+  /// Handles a tap on a notification shown by [_showForegroundNotification].
   void _handleNotificationTap(String? payload) {
-    debugPrint('Blood-Connect notification opened: $payload');
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final data = jsonDecode(payload);
+      if (data is Map<String, dynamic>) {
+        unawaited(NotificationRouter.instance.open(data));
+      }
+    } catch (error) {
+      debugPrint('Unreadable notification payload: $error');
+    }
+  }
+
+  /// Subscribes this device to PRC announcements (FCM topic). Topics are
+  /// not supported on the web.
+  Future<void> _subscribeToAnnouncements() async {
+    if (kIsWeb) return;
+    try {
+      await _messaging.subscribeToTopic(announcementsTopic);
+    } catch (error) {
+      debugPrint('Could not subscribe to announcements: $error');
+    }
   }
 
   String get _platformName {

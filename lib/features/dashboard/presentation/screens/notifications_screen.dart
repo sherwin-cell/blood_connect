@@ -1,14 +1,37 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/services/notification_router.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
+  /// Marks the notification read (only isRead and readAt may change, per
+  /// firestore.rules) and opens the screen it points to.
+  static void _open(
+    DocumentReference reference,
+    Map<String, dynamic> data,
+    bool isRead,
+  ) {
+    if (!isRead) {
+      reference
+          .update({'isRead': true, 'readAt': FieldValue.serverTimestamp()})
+          .catchError((Object error) {
+            debugPrint('Could not mark notification read: $error');
+          });
+    }
+    NotificationRouter.instance.open(data);
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) {
+      return const Scaffold(
+        body: Center(child: Text('Please sign in to view notifications.')),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -109,10 +132,7 @@ class NotificationsScreen extends StatelessWidget {
                     message,
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
-                  onTap: () {
-                    // Mark as read when clicked
-                    docs[index].reference.update({'isRead': true});
-                  },
+                  onTap: () => _open(docs[index].reference, data, isRead),
                 ),
               );
             },

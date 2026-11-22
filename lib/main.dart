@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'core/services/firestore_service.dart';
 import 'core/services/push_notification_service.dart';
+import 'core/services/notification_router.dart';
 
 import 'features/verification/domain/services/i_face_embedding_service.dart';
 import 'features/verification/data/services/tflite_face_embedding_service.dart';
@@ -95,6 +96,7 @@ class BloodConnectApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        navigatorKey: rootNavigatorKey,
         title: 'Blood-Connect',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(useMaterial3: true, fontFamily: 'Roboto'),
