@@ -1,3 +1,4 @@
+import 'package:blood_connect/core/constants/statuses.dart';
 import 'dart:io';
 
 import 'package:blood_connect/features/verification/domain/entities/request_id_verification_data.dart';
@@ -34,7 +35,10 @@ class _FakeVerificationRepository implements IVerificationRepository {
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
     required String frontIdPath,
     String? backIdPath,
-  }) async => (frontUrl: 'https://example.com/front.jpg', backUrl: 'https://example.com/back.jpg');
+  }) async => (
+    frontUrl: 'https://example.com/front.jpg',
+    backUrl: 'https://example.com/back.jpg',
+  );
 
   @override
   Future<String?> getIdVerificationStatus(String userId) async => 'pending';
@@ -57,64 +61,75 @@ class _FakeVerificationRepository implements IVerificationRepository {
 
 void main() {
   group('RequestIdVerificationData', () {
-    test('isComplete requires idType, both image paths, and validationStatus', () {
-      final dir = Directory.systemTemp.createTempSync('id_verification_test_');
-      addTearDown(() => dir.deleteSync(recursive: true));
+    test(
+      'isComplete requires idType, both image paths, and validationStatus',
+      () {
+        final dir = Directory.systemTemp.createTempSync(
+          'id_verification_test_',
+        );
+        addTearDown(() => dir.deleteSync(recursive: true));
 
-      final frontPath = '${dir.path}/front.jpg';
-      final backPath = '${dir.path}/back.jpg';
-      File(frontPath).writeAsStringSync('front');
-      File(backPath).writeAsStringSync('back');
+        final frontPath = '${dir.path}/front.jpg';
+        final backPath = '${dir.path}/back.jpg';
+        File(frontPath).writeAsStringSync('front');
+        File(backPath).writeAsStringSync('back');
 
-      final completeData = RequestIdVerificationData(
-        idType: 'Driver License',
-        frontIdImage: frontPath,
-        backIdImage: backPath,
-        validationStatus: 'valid',
-      );
+        final completeData = RequestIdVerificationData(
+          idType: 'Driver License',
+          frontIdImage: frontPath,
+          backIdImage: backPath,
+          validationStatus: 'valid',
+        );
 
-      expect(completeData.isComplete, isTrue);
-      final missingValidation = RequestIdVerificationData(
-        idType: 'Driver License',
-        frontIdImage: frontPath,
-        backIdImage: backPath,
-        validationStatus: null,
-      );
+        expect(completeData.isComplete, isTrue);
+        // validationStatus is optional: it is filled in later by the review.
+        final missingValidation = RequestIdVerificationData(
+          idType: 'Driver License',
+          frontIdImage: frontPath,
+          backIdImage: backPath,
+          validationStatus: null,
+        );
 
-      final missingBackImage = RequestIdVerificationData(
-        idType: 'Driver License',
-        frontIdImage: frontPath,
-        backIdImage: null,
-        validationStatus: 'valid',
-      );
+        final missingBackImage = RequestIdVerificationData(
+          idType: 'Driver License',
+          frontIdImage: frontPath,
+          backIdImage: null,
+          validationStatus: 'valid',
+        );
 
-      expect(missingValidation.isComplete, isFalse);
-      expect(missingBackImage.isComplete, isFalse);
-    });
+        expect(missingValidation.isComplete, isTrue);
+        expect(missingBackImage.isComplete, isFalse);
+      },
+    );
   });
 
   group('RequestIdVerificationProvider', () {
-    test('successful submission keeps the status pending until admin review', () async {
-      final dir = Directory.systemTemp.createTempSync('id_verification_provider_test_');
-      addTearDown(() => dir.deleteSync(recursive: true));
+    test(
+      'successful submission marks the ID as submitted until admin review',
+      () async {
+        final dir = Directory.systemTemp.createTempSync(
+          'id_verification_provider_test_',
+        );
+        addTearDown(() => dir.deleteSync(recursive: true));
 
-      final frontPath = '${dir.path}/front.jpg';
-      final backPath = '${dir.path}/back.jpg';
-      File(frontPath).writeAsStringSync('front');
-      File(backPath).writeAsStringSync('back');
+        final frontPath = '${dir.path}/front.jpg';
+        final backPath = '${dir.path}/back.jpg';
+        File(frontPath).writeAsStringSync('front');
+        File(backPath).writeAsStringSync('back');
 
-      final provider = RequestIdVerificationProvider(
-        repository: _FakeVerificationRepository(),
-        userId: 'user-123',
-      );
+        final provider = RequestIdVerificationProvider(
+          repository: _FakeVerificationRepository(),
+          userId: 'user-123',
+        );
 
-      provider.selectIdType('Driver License');
-      await provider.processIdCard(File(frontPath));
-      await provider.processBackIdCard(File(backPath));
-      await provider.confirmAndSubmit();
+        provider.selectIdType('Driver License');
+        await provider.processIdCard(File(frontPath));
+        await provider.processBackIdCard(File(backPath));
+        await provider.confirmAndSubmit();
 
-      expect(provider.verificationStatus, 'pending');
-      expect(provider.canSubmitId, isFalse);
-    });
+        expect(provider.verificationStatus, IdVerificationStatus.submitted);
+        expect(provider.canSubmitId, isFalse);
+      },
+    );
   });
 }

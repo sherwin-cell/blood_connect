@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/constants/statuses.dart';
 
 class RequestOffersScreen extends StatelessWidget {
   final String requestId;
@@ -86,7 +87,7 @@ class RequestOffersScreen extends StatelessWidget {
               final donorName = offerData['donorName'] ?? 'Anonymous Donor';
               final donorBloodType = offerData['donorBloodType'] ?? 'N/A';
               final donorContact = offerData['donorContact'] ?? 'N/A';
-              final status = offerData['status'] ?? 'pending';
+              final status = offerData['status'] ?? OfferStatus.pending;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -94,7 +95,9 @@ class RequestOffersScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.05),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,7 +145,7 @@ class RequestOffersScreen extends StatelessWidget {
                     Text(
                       'Status: ${status.toUpperCase()}',
                       style: TextStyle(
-                        color: status == 'accepted'
+                        color: status == OfferStatus.accepted
                             ? Colors.green
                             : Colors.orange.shade800,
                         fontWeight: FontWeight.bold,
@@ -161,7 +164,7 @@ class RequestOffersScreen extends StatelessWidget {
                                   .doc(requestId)
                                   .collection('offers')
                                   .doc(offerId)
-                                  .update({'status': 'accepted'});
+                                  .update({'status': OfferStatus.accepted});
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.green,

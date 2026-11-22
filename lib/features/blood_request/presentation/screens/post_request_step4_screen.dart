@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/firestore_service.dart';
 import '../../../verification/domain/entities/request_id_verification_data.dart';
 import '../widgets/step_indicator.dart';
+import '../../../../core/constants/statuses.dart';
 
 class PostRequestStep4Screen extends StatefulWidget {
   final String patientName;
@@ -140,7 +141,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
 
         final status = data['status']?.toString().toLowerCase();
 
-        if (status == 'active' || status == 'pending') {
+        if (RequestStatus.isInProgress(status)) {
           return true;
         }
       }
@@ -283,7 +284,7 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
           'otherInfo': widget.otherInfo,
 
           // Request status
-          'status': 'pending',
+          'status': RequestStatus.pending,
           'createdAt': FieldValue.serverTimestamp(),
         },
 

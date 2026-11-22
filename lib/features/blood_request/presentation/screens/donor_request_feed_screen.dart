@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../donor/data/repositories/donor_repository_impl.dart';
+import '../../../../core/constants/statuses.dart';
 
 class DonorRequestFeedScreen extends StatefulWidget {
   const DonorRequestFeedScreen({super.key});
@@ -105,7 +106,7 @@ class _DonorRequestFeedScreenState extends State<DonorRequestFeedScreen> {
 
           // A donor must be approved before they can participate
           // in the matching center.
-          if (donorStatus != 'approved' || !isDonor) {
+          if (donorStatus != DonorStatus.approved || !isDonor) {
             return _buildMessage(
               icon: Icons.pending_actions_outlined,
               message: 'Your donor application is not approved yet.',
@@ -189,7 +190,7 @@ class _DonorRequestFeedScreenState extends State<DonorRequestFeedScreen> {
           // 2. Request must belong to another user.
           // 3. Blood type must exactly match the donor's
           //    blood type.
-          return (requestStatus == 'active' || requestStatus == 'approved') &&
+          return RequestStatus.isOpenToDonors(requestStatus) &&
               requestUserId != currentUserId &&
               requestBloodType == donorBloodType;
         }).toList();

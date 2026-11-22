@@ -12,6 +12,7 @@ import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
 // import '../../../announcements/presentation/screens/announcements_screen.dart';
 import '../../../verification/presentation/id_verification_flow.dart';
 import '../widgets/member_card.dart';
+import '../../../../core/constants/statuses.dart';
 
 class HomeTabView extends StatelessWidget {
   final UserProfile? profile;
@@ -662,7 +663,7 @@ class HomeTabView extends StatelessWidget {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('blood_requests')
           .where('userId', isEqualTo: user.uid)
-          .where('status', whereIn: ['active', 'approved'])
+          .where('status', whereIn: RequestStatus.openToDonors)
           .get();
 
       if (!context.mounted) {
@@ -849,7 +850,7 @@ class HomeTabView extends StatelessWidget {
 
       debugPrint('BLOOD REQUESTER: bloodType=$donorBloodType');
 
-      if (donorStatus != 'approved' || !isDonor) {
+      if (donorStatus != DonorStatus.approved || !isDonor) {
         _showMatchingMessage(
           context,
           title: 'Donor Application Not Approved',

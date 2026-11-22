@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../data/repositories/donor_repository_impl.dart';
+import '../../../../core/constants/statuses.dart';
 
 class CompatibleRequestsScreen extends StatefulWidget {
   final String donorBloodType;
@@ -295,7 +296,7 @@ class _CompatibleRequestsScreenState extends State<CompatibleRequestsScreen> {
                       .trim()
                       .toLowerCase();
 
-                  if (status != 'active' && status != 'approved') {
+                  if (!RequestStatus.isOpenToDonors(status)) {
                     return false;
                   }
 

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/constants/statuses.dart';
 
 class DonorRepositoryImpl {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -140,7 +141,7 @@ class DonorRepositoryImpl {
         .trim()
         .toLowerCase();
 
-    if (requestStatus != 'active' && requestStatus != 'approved') {
+    if (!RequestStatus.isOpenToDonors(requestStatus)) {
       throw Exception(
         'This blood request is no longer available for donation offers.',
       );
@@ -170,7 +171,7 @@ class DonorRepositoryImpl {
 
     final existingOffer = await offersRef
         .where('donorId', isEqualTo: donorId)
-        .where('status', whereIn: ['pending', 'accepted'])
+        .where('status', whereIn: OfferStatus.active)
         .limit(1)
         .get();
 
@@ -189,7 +190,7 @@ class DonorRepositoryImpl {
       'donorName': donorName.trim(),
       'donorContact': donorContact.trim(),
       'donorBloodType': normalizedDonorBloodType,
-      'status': 'pending',
+      'status': OfferStatus.pending,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

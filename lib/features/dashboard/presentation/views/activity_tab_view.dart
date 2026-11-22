@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
 import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
 import '../../../requests/presentation/request_rejection_screen.dart';
+import '../../../../core/constants/statuses.dart';
 
 class ActivityTabView extends StatelessWidget {
   const ActivityTabView({super.key});
@@ -56,7 +57,7 @@ class ActivityTabView extends StatelessWidget {
                 final data = doc.data();
                 return _RequestActivityTile(
                   title: 'Blood request for ${data['bloodType'] ?? '—'}',
-                  status: (data['status'] as String? ?? 'pending')
+                  status: (data['status'] as String? ?? RequestStatus.pending)
                       .toLowerCase(),
                   rejectionReason:
                       data['rejectionReason'] as String? ??
@@ -102,7 +103,7 @@ class ActivityTabView extends StatelessWidget {
             final status =
                 (data['donorStatus'] as String? ??
                         data['status'] as String? ??
-                        'pending')
+                        DonorStatus.pending)
                     .toLowerCase();
             return _RequestActivityTile(
               title: 'Donor application',
@@ -144,9 +145,9 @@ class _RequestActivityTile extends StatelessWidget {
 
   Color get _statusColor {
     switch (status) {
-      case 'approved':
+      case DonorStatus.approved:
         return Colors.green;
-      case 'rejected':
+      case DonorStatus.rejected:
         return AppColors.primaryRed;
       default:
         return Colors.orange;
@@ -160,7 +161,7 @@ class _RequestActivityTile extends StatelessWidget {
       child: ListTile(
         title: Text(title),
         subtitle: Text(
-          status == 'rejected' && (rejectionReason ?? '').isNotEmpty
+          status == DonorStatus.rejected && (rejectionReason ?? '').isNotEmpty
               ? 'Rejected — tap to view reason'
               : 'Status: $status',
         ),
@@ -168,7 +169,7 @@ class _RequestActivityTile extends StatelessWidget {
           status,
           style: TextStyle(color: _statusColor, fontWeight: FontWeight.bold),
         ),
-        onTap: status == 'rejected'
+        onTap: status == DonorStatus.rejected
             ? () {
                 Navigator.of(context).push(
                   MaterialPageRoute(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import './post_request_step3_screen.dart';
 import '../widgets/step_indicator.dart';
+import '../../../../core/constants/statuses.dart';
 
 class PostRequestStep2Screen extends StatefulWidget {
   final String patientName;
@@ -97,7 +98,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
           unitsRequired: int.tryParse(_selectedUnits!.replaceAll('+', '')) ?? 1,
           component: _selectedComponent ?? 'Whole Blood',
           hemoglobin: _hemoglobinController.text.trim(),
-          urgency: 'Urgent',
+          urgency: RequestUrgency.urgent,
           neededByDate: DateTime.now().add(const Duration(days: 1)),
           notes: _notesController.text.trim(),
         ),

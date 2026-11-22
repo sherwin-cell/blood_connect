@@ -1,3 +1,5 @@
+import '../../../../core/constants/statuses.dart';
+
 class RequestIdVerificationData {
   final String? idType;
   final String? frontIdImage;
@@ -15,7 +17,8 @@ class RequestIdVerificationData {
 
   static bool isApprovedStatus(String? status) {
     final normalized = status?.trim().toLowerCase();
-    return normalized == 'approved' || normalized == 'verified';
+    return normalized == IdVerificationStatus.approved ||
+        normalized == IdVerificationStatus.legacyVerified;
   }
 
   static bool requiresIdCapture(String? status) {

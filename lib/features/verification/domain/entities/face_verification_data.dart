@@ -1,3 +1,5 @@
+import '../../../../core/constants/statuses.dart';
+
 class FaceVerificationData {
   final String? selfiePath;
   final bool hasDetectedFace;
@@ -18,7 +20,7 @@ class FaceVerificationData {
   });
 
   bool get isVerified =>
-      verificationResult == 'verified' && hasDetectedFace;
+      verificationResult == FaceVerificationResult.verified && hasDetectedFace;
 
   FaceVerificationData copyWith({
     String? selfiePath,

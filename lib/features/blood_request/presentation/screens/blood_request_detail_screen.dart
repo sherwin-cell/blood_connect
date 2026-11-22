@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../donor/data/repositories/donor_repository_impl.dart';
+import '../../../../core/constants/statuses.dart';
 
 class BloodRequestDetailScreen extends StatefulWidget {
   final String requestId;
@@ -80,7 +81,8 @@ class _BloodRequestDetailScreenState extends State<BloodRequestDetailScreen> {
           .doc(user.uid)
           .get();
 
-      if (!donorDoc.exists || donorDoc.data()?['donorStatus'] != 'approved') {
+      if (!donorDoc.exists ||
+          donorDoc.data()?['donorStatus'] != DonorStatus.approved) {
         throw Exception(
           'You must be an approved donor by the PRC to make an offer.',
         );
@@ -135,7 +137,7 @@ class _BloodRequestDetailScreenState extends State<BloodRequestDetailScreen> {
     final units = data['unitsRequired'] ?? 1;
     final contact = data['contactNumber'] ?? 'N/A';
     final notes = data['notes'] ?? 'No additional notes provided.';
-    final status = data['status'] ?? 'active';
+    final status = data['status'] ?? RequestStatus.active;
 
     return Scaffold(
       backgroundColor: AppColors.background,

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/face_verification_data.dart';
 import '../../domain/repositories/i_verification_repository.dart';
+import '../../../../core/constants/statuses.dart';
 
 enum FaceVerificationStatus { none, verified, failed }
 
@@ -16,10 +17,8 @@ class VerificationProvider extends ChangeNotifier {
   String? _errorMessage;
   FaceVerificationStatus _status = FaceVerificationStatus.none;
 
-  VerificationProvider({
-    required this.repository,
-    FirebaseAuth? auth,
-  }) : _auth = auth ?? FirebaseAuth.instance;
+  VerificationProvider({required this.repository, FirebaseAuth? auth})
+    : _auth = auth ?? FirebaseAuth.instance;
 
   FaceVerificationData get data => _data;
   bool get isLoading => _isLoading;
@@ -51,10 +50,7 @@ class VerificationProvider extends ChangeNotifier {
         return false;
       }
 
-      _data = _data.copyWith(
-        selfiePath: imageFile.path,
-        hasDetectedFace: true,
-      );
+      _data = _data.copyWith(selfiePath: imageFile.path, hasDetectedFace: true);
       _errorMessage = null;
       return true;
     } catch (e) {
@@ -98,7 +94,9 @@ class VerificationProvider extends ChangeNotifier {
       final finalData = _data.copyWith(
         faceMatchPassed: passed,
         verificationProvider: 'local_liveness',
-        verificationResult: passed ? 'verified' : 'failed',
+        verificationResult: passed
+            ? FaceVerificationResult.verified
+            : FaceVerificationResult.failed,
         verifiedAt: DateTime.now(),
       );
       _data = finalData;

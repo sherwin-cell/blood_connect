@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/constants/statuses.dart';
 
 class UrgentRequestsScreen extends StatefulWidget {
   const UrgentRequestsScreen({super.key});
@@ -126,7 +127,8 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('blood_requests')
-                  .where('status', isEqualTo: 'urgent')
+                  .where('urgency', isEqualTo: RequestUrgency.urgent)
+                  .where('status', whereIn: RequestStatus.openToDonors)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {

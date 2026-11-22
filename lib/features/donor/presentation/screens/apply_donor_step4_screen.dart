@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/firestore_service.dart';
 import '../../../verification/domain/entities/request_id_verification_data.dart';
 import '../../../donor/presentation/widgets/step_indicator.dart';
+import '../../../../core/constants/statuses.dart';
 
 class ApplyDonorStep4Screen extends StatefulWidget {
   final Map<String, dynamic> personalData;
@@ -125,8 +126,8 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
         'eligibilityAnswers': widget.eligibilityAnswers.map(
           (k, v) => MapEntry(k.toString(), v),
         ),
-        'donorStatus': 'pending',
-        'applicationStatus': 'pending',
+        'donorStatus': DonorStatus.pending,
+        'applicationStatus': DonorStatus.pending,
         'frontIdImageUrl': _frontIdImageUrl ?? '',
         'backIdImageUrl': _backIdImageUrl ?? '',
         'appliedForDonorAt': FieldValue.serverTimestamp(),
@@ -233,7 +234,9 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
         color: hasId ? donorGreen.withValues(alpha: 0.06) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: hasId ? donorGreen.withValues(alpha: 0.2) : Colors.grey.shade200,
+          color: hasId
+              ? donorGreen.withValues(alpha: 0.2)
+              : Colors.grey.shade200,
         ),
       ),
       child: Row(
@@ -243,7 +246,9 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: hasId ? donorGreen.withValues(alpha: 0.1) : Colors.grey.shade200,
+              color: hasId
+                  ? donorGreen.withValues(alpha: 0.1)
+                  : Colors.grey.shade200,
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -416,7 +421,9 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
                     decoration: BoxDecoration(
                       color: donorGreen.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: donorGreen.withValues(alpha: 0.15)),
+                      border: Border.all(
+                        color: donorGreen.withValues(alpha: 0.15),
+                      ),
                     ),
                     child: const Row(
                       children: [

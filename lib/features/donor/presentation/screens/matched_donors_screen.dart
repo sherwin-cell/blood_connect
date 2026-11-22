@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/repositories/donor_repository_impl.dart';
 import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
+import '../../../../core/constants/statuses.dart';
 
 class MatchedDonorsScreen extends StatelessWidget {
   final String requesterBloodType;
@@ -155,7 +156,7 @@ class MatchedDonorsScreen extends StatelessWidget {
                   final isCurrentUser =
                       currentUserId != null && donorId == currentUserId;
 
-                  final hasApprovedStatus = donorStatus == 'approved';
+                  final hasApprovedStatus = donorStatus == DonorStatus.approved;
 
                   final exactBloodTypeMatch =
                       donorBloodType == normalizedRequesterBloodType;
@@ -286,7 +287,9 @@ class MatchedDonorsScreen extends StatelessWidget {
                   ),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.primaryRed,
-              side: BorderSide(color: AppColors.primaryRed.withValues(alpha: 0.5)),
+              side: BorderSide(
+                color: AppColors.primaryRed.withValues(alpha: 0.5),
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),

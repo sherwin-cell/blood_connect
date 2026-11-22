@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/request_id_verification_data.dart';
 import '../../domain/repositories/i_verification_repository.dart';
+import '../../../../core/constants/statuses.dart';
 
 /// Manages the one-time ID submission flow.
 /// A submitted ID is reusable; it is not a claim that the ID is authentic
@@ -37,7 +38,8 @@ class RequestIdVerificationProvider extends ChangeNotifier {
   )
   bool get isAccountFullyVerified => hasSubmittedId;
 
-  bool get hasSubmittedId => _verificationStatus == 'submitted';
+  bool get hasSubmittedId =>
+      _verificationStatus == IdVerificationStatus.submitted;
 
   /// Kept for compatibility with older screens. There is no separate
   /// ID approval queue in the one-time submission workflow.
@@ -52,17 +54,17 @@ class RequestIdVerificationProvider extends ChangeNotifier {
 
   String? _normalizeStatus(String? status) {
     switch (status?.trim().toLowerCase()) {
-      case 'submitted':
-      case 'approved':
-      case 'verified':
-      case 'pending':
+      case IdVerificationStatus.submitted:
+      case IdVerificationStatus.approved:
+      case IdVerificationStatus.legacyVerified:
+      case IdVerificationStatus.legacyPending:
         // Legacy saved IDs count as submitted; the repository/service
         // must check that the actual saved ID record exists.
-        return 'submitted';
+        return IdVerificationStatus.submitted;
       case null:
       case '':
       case 'unverified':
-      case 'rejected':
+      case IdVerificationStatus.rejected:
         return null;
       default:
         // Unknown status must not silently permit another upload.
@@ -174,10 +176,10 @@ class RequestIdVerificationProvider extends ChangeNotifier {
       final savedStatus = _normalizeStatus(
         await repository.getIdVerificationStatus(userId),
       );
-      if (savedStatus != 'submitted') {
+      if (savedStatus != IdVerificationStatus.submitted) {
         throw StateError('ID submission could not be confirmed.');
       }
-      _verificationStatus = 'submitted';
+      _verificationStatus = IdVerificationStatus.submitted;
       notifyListeners();
       return true;
     } catch (e, stackTrace) {

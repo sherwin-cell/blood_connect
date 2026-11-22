@@ -5,6 +5,7 @@ import '../../features/profile/domain/user_profile_model.dart';
 import '../../features/verification/domain/entities/face_verification_data.dart';
 
 import '../../features/verification/domain/entities/request_id_verification_data.dart';
+import '../constants/statuses.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -201,10 +202,10 @@ class FirestoreService {
     final result =
         data.verificationResult ??
         (data.hasDetectedFace && (data.faceMatchPassed ?? true)
-            ? 'verified'
-            : 'failed');
+            ? FaceVerificationResult.verified
+            : FaceVerificationResult.failed);
 
-    final verified = result == 'verified';
+    final verified = result == FaceVerificationResult.verified;
 
     await _firestore.collection('users').doc(userId).set({
       'selfieImageUrl': selfieCloudinaryUrl,
@@ -259,7 +260,7 @@ class FirestoreService {
       return null;
     }
 
-    return 'submitted';
+    return IdVerificationStatus.submitted;
   }
 
   /// Saves the first ID submission only. An existing document is never
@@ -294,7 +295,7 @@ class FirestoreService {
       transaction.set(submissionRef, {
         'submissionId': submissionRef.id,
         'userId': userId,
-        'status': 'submitted',
+        'status': IdVerificationStatus.submitted,
         'idType': data.idType,
         'frontIdImageUrl': frontUrl,
         'backIdImageUrl': backUrl,
@@ -367,7 +368,7 @@ class FirestoreService {
 
       'idVerification': idVerification,
 
-      'status': requestPayload['status'] ?? 'pending',
+      'status': requestPayload['status'] ?? RequestStatus.pending,
 
       'updatedAt': now,
     };
@@ -413,9 +414,9 @@ class FirestoreService {
       final newData = <String, dynamic>{
         ...data,
         'applicationId': newApplicationId,
-        'applicationStatus': 'pending',
-        'donorStatus': 'pending',
-        'status': 'pending',
+        'applicationStatus': DonorStatus.pending,
+        'donorStatus': DonorStatus.pending,
+        'status': DonorStatus.pending,
       };
 
       final old = existing.data();
@@ -427,7 +428,8 @@ class FirestoreService {
                 .trim()
                 .toLowerCase();
 
-        if (oldStatus != 'rejected' || old['reapplicationAllowed'] != true) {
+        if (oldStatus != DonorStatus.rejected ||
+            old['reapplicationAllowed'] != true) {
           throw Exception(
             'You already have a donor application. You can apply again '
             'only if PRC rejected it and allowed reapplication.',
@@ -498,7 +500,7 @@ class FirestoreService {
 
           'donorBloodType': donorBloodType,
 
-          'status': 'pending',
+          'status': OfferStatus.pending,
 
           'createdAt': FieldValue.serverTimestamp(),
         });
