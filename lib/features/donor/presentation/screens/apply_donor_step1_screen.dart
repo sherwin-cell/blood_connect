@@ -251,7 +251,8 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
-        value: value,
+        key: ValueKey('$label-$value'),
+        initialValue: value,
         isExpanded: true,
         items: items.map((String item) {
           return DropdownMenuItem<String>(

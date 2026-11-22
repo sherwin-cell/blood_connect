@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
-import 'PostRequestStep2Screen.dart';
+import 'post_request_step2_screen.dart';
 import '../widgets/step_indicator.dart';
 
 class PostRequestStep1Screen extends StatefulWidget {
@@ -227,7 +227,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                         Expanded(
                           flex: 3,
                           child: DropdownButtonFormField<String>(
-                            value: _selectedSex,
+                            initialValue: _selectedSex,
                             decoration: _inputDecoration(
                               'Sex',
                               Icons.wc_outlined,
@@ -302,7 +302,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                     const SizedBox(height: 16),
 
                     DropdownButtonFormField<String>(
-                      value: _selectedRelationship,
+                      initialValue: _selectedRelationship,
                       decoration: _inputDecoration(
                         'Relationship to Patient',
                         Icons.group_outlined,

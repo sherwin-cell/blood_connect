@@ -226,6 +226,8 @@ class _PostRequestStep4ScreenState extends State<PostRequestStep4Screen> {
       // FIRESTORE SERVICE
       // ----------------------------------------------------------
 
+      if (!mounted) return;
+
       final firestoreService = context.read<FirestoreService>();
 
       final idData = RequestIdVerificationData(

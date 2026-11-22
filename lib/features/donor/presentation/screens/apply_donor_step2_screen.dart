@@ -160,136 +160,136 @@ class _ApplyDonorStep2ScreenState extends State<ApplyDonorStep2Screen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.grey.shade200),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RadioListTile<bool>(
-                      value: true,
-                      groupValue: _knowsBloodType,
-                      activeColor: donorGreen,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'I know my blood type',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                child: RadioGroup<bool>(
+                  groupValue: _knowsBloodType,
+                  onChanged: (val) {
+                    setState(() {
+                      _knowsBloodType = val!;
+                    });
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RadioListTile<bool>(
+                        value: true,
+                        activeColor: donorGreen,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'I know my blood type',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      onChanged: (val) {
-                        setState(() {
-                          _knowsBloodType = val!;
-                        });
-                      },
-                    ),
-                    if (_knowsBloodType) ...[
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: _selectedBloodType,
-                        decoration: InputDecoration(
-                          labelText: 'Blood Type',
-                          labelStyle: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.bloodtype_outlined,
-                            color: donorGreen,
-                            size: 20,
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: donorGreen,
-                              width: 1.5,
+                      if (_knowsBloodType) ...[
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedBloodType,
+                          decoration: InputDecoration(
+                            labelText: 'Blood Type',
+                            labelStyle: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
                             ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                        ),
-                        items: _bloodTypes
-                            .map(
-                              (type) => DropdownMenuItem<String>(
-                                value: type,
-                                child: Text(
-                                  type,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedBloodType = val ?? 'O+';
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    RadioListTile<bool>(
-                      value: false,
-                      groupValue: _knowsBloodType,
-                      activeColor: donorGreen,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        "I don't know my blood type yet.",
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _knowsBloodType = val!;
-                        });
-                      },
-                    ),
-                    if (!_knowsBloodType) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.green.shade200),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
+                            prefixIcon: const Icon(
+                              Icons.bloodtype_outlined,
                               color: donorGreen,
                               size: 20,
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'You can still register as a donor. Your blood type will be determined during actual donation at PRC.',
-                                style: TextStyle(
-                                  color: Colors.green.shade900,
-                                  fontSize: 11,
-                                  height: 1.3,
-                                ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
                               ),
                             ),
-                          ],
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                color: donorGreen,
+                                width: 1.5,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                          ),
+                          items: _bloodTypes
+                              .map(
+                                (type) => DropdownMenuItem<String>(
+                                  value: type,
+                                  child: Text(
+                                    type,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedBloodType = val ?? 'O+';
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      RadioListTile<bool>(
+                        value: false,
+                        activeColor: donorGreen,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          "I don't know my blood type yet.",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
+                      if (!_knowsBloodType) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                color: donorGreen,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'You can still register as a donor. Your blood type will be determined during actual donation at PRC.',
+                                  style: TextStyle(
+                                    color: Colors.green.shade900,
+                                    fontSize: 11,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
 
@@ -307,78 +307,76 @@ class _ApplyDonorStep2ScreenState extends State<ApplyDonorStep2Screen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.grey.shade200),
                 ),
-                child: Column(
-                  children: [
-                    RadioListTile<String>(
-                      value: 'First-Time Donor',
-                      groupValue: _donorCategory,
-                      activeColor: donorGreen,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'First-Time Donor',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                child: RadioGroup<String>(
+                  groupValue: _donorCategory,
+                  onChanged: (val) => setState(() => _donorCategory = val!),
+                  child: Column(
+                    children: [
+                      RadioListTile<String>(
+                        value: 'First-Time Donor',
+                        activeColor: donorGreen,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'First-Time Donor',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      onChanged: (val) => setState(() => _donorCategory = val!),
-                    ),
-                    RadioListTile<String>(
-                      value: 'Regular Donor',
-                      groupValue: _donorCategory,
-                      activeColor: donorGreen,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Regular Donor',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                      RadioListTile<String>(
+                        value: 'Regular Donor',
+                        activeColor: donorGreen,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Regular Donor',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      onChanged: (val) => setState(() => _donorCategory = val!),
-                    ),
-                    RadioListTile<String>(
-                      value: 'Lapse Donor',
-                      groupValue: _donorCategory,
-                      activeColor: donorGreen,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Lapse Donor',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                      RadioListTile<String>(
+                        value: 'Lapse Donor',
+                        activeColor: donorGreen,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Lapse Donor',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                      secondary: IconButton(
-                        icon: const Icon(
-                          Icons.info_outline,
-                          size: 18,
-                          color: donorGreen,
-                        ),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Lapse Donor'),
-                              content: const Text(
-                                'A lapse donor is someone who has donated blood before, but more than 365 days ago.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text(
-                                    'Close',
-                                    style: TextStyle(color: donorGreen),
-                                  ),
+                        secondary: IconButton(
+                          icon: const Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: donorGreen,
+                          ),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Lapse Donor'),
+                                content: const Text(
+                                  'A lapse donor is someone who has donated blood before, but more than 365 days ago.',
                                 ),
-                              ],
-                            ),
-                          );
-                        },
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text(
+                                      'Close',
+                                      style: TextStyle(color: donorGreen),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                      onChanged: (val) => setState(() => _donorCategory = val!),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 

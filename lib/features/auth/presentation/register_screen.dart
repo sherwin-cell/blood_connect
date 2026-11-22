@@ -350,7 +350,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Expanded(
                 flex: 1,
                 child: DropdownButtonFormField<String>(
-                  value: _selectedSuffix,
+                  initialValue: _selectedSuffix,
                   style: const TextStyle(fontSize: 13, color: Colors.black87),
                   decoration: _inputDecoration('SUFFIX'),
                   items: _suffixOptions.map((suffix) {

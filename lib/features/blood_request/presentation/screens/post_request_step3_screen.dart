@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../core/theme/app_theme.dart';
-import './PostRequestStep4Screen.dart';
+import './post_request_step4_screen.dart';
 import '../widgets/step_indicator.dart';
 
 class PostRequestStep3Screen extends StatefulWidget {
@@ -91,7 +91,7 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
         allowedExtensions: ['pdf'],
       );
 
-      if (result == null || result.isEmpty) {
+      if (result.isEmpty) {
         debugPrint('BRF PDF: User cancelled file picker.');
         return;
       }

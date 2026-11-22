@@ -812,7 +812,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   children: [
                     const _FieldLabel('Nationality *'),
                     DropdownButtonFormField<String>(
-                      value: _selectedNationality,
+                      initialValue: _selectedNationality,
                       dropdownColor: Colors.white,
                       style: GoogleFonts.inter(
                         fontSize: 14,
@@ -865,10 +865,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       ),
                       decoration: _inputDecoration('e.g. 09123456789'),
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty)
+                        if (v == null || v.trim().isEmpty) {
                           return 'Phone Number is required';
-                        if (v.trim().length < 10)
+                        }
+                        if (v.trim().length < 10) {
                           return 'Enter a valid phone number';
+                        }
                         return null;
                       },
                     ),
@@ -906,7 +908,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   children: [
                     const _FieldLabel('Municipality *'),
                     DropdownButtonFormField<String>(
-                      value: _selectedMunicipality,
+                      initialValue: _selectedMunicipality,
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         color: Colors.black87,
@@ -956,7 +958,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   children: [
                     const _FieldLabel('Barangay *'),
                     DropdownButtonFormField<String>(
-                      value: _selectedBarangay,
+                      key: ValueKey('barangay-$_selectedMunicipality'),
+                      initialValue: _selectedBarangay,
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         color: Colors.black87,

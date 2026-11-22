@@ -137,11 +137,11 @@ class FirestoreService {
 
       'phoneNumber': phoneNumber,
 
-      if (province != null) 'province': province,
+      'province': ?province,
 
-      if (municipality != null) 'municipality': municipality,
+      'municipality': ?municipality,
 
-      if (barangay != null) 'barangay': barangay,
+      'barangay': ?barangay,
 
       'profileCompleted': true,
 

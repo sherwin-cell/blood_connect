@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
-import './PostRequestStep3Screen.dart';
+import './post_request_step3_screen.dart';
 import '../widgets/step_indicator.dart';
 
 class PostRequestStep2Screen extends StatefulWidget {
@@ -198,7 +198,8 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                   children: [
                     // 1. Blood Type Needed
                     DropdownButtonFormField<String>(
-                      value: _anyBloodType ? null : _selectedBloodType,
+                      key: ValueKey('bloodType-$_anyBloodType'),
+                      initialValue: _anyBloodType ? null : _selectedBloodType,
                       decoration: _inputDecoration(
                         'Blood Type Needed',
                         Icons.water_drop_outlined,
@@ -276,7 +277,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
 
                     // 2. Units Needed
                     DropdownButtonFormField<String>(
-                      value: _selectedUnits,
+                      initialValue: _selectedUnits,
                       decoration: _inputDecoration(
                         'Units Needed',
                         Icons.list_alt_outlined,
@@ -293,7 +294,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
 
                     // 3. Component
                     DropdownButtonFormField<String>(
-                      value: _selectedComponent,
+                      initialValue: _selectedComponent,
                       decoration: _inputDecoration(
                         'Blood Component',
                         Icons.science_outlined,

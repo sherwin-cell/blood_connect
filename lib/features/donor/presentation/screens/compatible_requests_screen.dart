@@ -743,7 +743,6 @@ class _CompatibleRequestsScreenState extends State<CompatibleRequestsScreen> {
                               Navigator.pop(sheetContext);
 
                               await _submitOffer(
-                                context: context,
                                 requestId: requestId,
                                 currentUserId: currentUserId,
                               );
@@ -868,7 +867,6 @@ class _CompatibleRequestsScreenState extends State<CompatibleRequestsScreen> {
   // ================================================================
 
   Future<void> _submitOffer({
-    required BuildContext context,
     required String requestId,
     required String? currentUserId,
   }) async {
