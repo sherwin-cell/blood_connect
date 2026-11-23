@@ -194,8 +194,14 @@ abstract final class IdVerificationStatus {
   static const legacyVerified = 'verified';
 }
 
-/// Result of the on-device face match.
+/// `users/{uid}.faceVerification.result`.
+///
+/// Written by blood_connect_backend (verified / failed) or by a PRC admin in
+/// blood-connect-admin (approved_by_admin / rejected_by_admin). Never by the
+/// app. Keep in sync with FaceVerificationResult in the admin's statuses.js.
 abstract final class FaceVerificationResult {
   static const verified = 'verified';
   static const failed = 'failed';
+  static const approvedByAdmin = 'approved_by_admin';
+  static const rejectedByAdmin = 'rejected_by_admin';
 }

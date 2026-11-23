@@ -12,57 +12,32 @@ String? formatActivityDate(dynamic value) {
   return null;
 }
 
-/// Asks the user to confirm a destructive action.
-///
-/// Returns null when they back out, otherwise the (possibly empty) reason
-/// they typed. The reason field is shown only when [withReason] is true.
-Future<String?> confirmActivityAction(
+/// Asks the user to confirm a destructive action; true when confirmed.
+Future<bool> confirmActivityAction(
   BuildContext context, {
   required String title,
   required String message,
   required String confirmLabel,
-  bool withReason = false,
 }) async {
-  final controller = TextEditingController();
-  try {
-    return await showDialog<String?>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(message),
-            if (withReason) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: 'Reason (optional)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ],
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Keep'),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Keep'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            style: TextButton.styleFrom(foregroundColor: AppColors.primaryRed),
-            child: Text(confirmLabel),
-          ),
-        ],
-      ),
-    );
-  } finally {
-    controller.dispose();
-  }
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          style: TextButton.styleFrom(foregroundColor: AppColors.primaryRed),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
 }
 
 /// Shows a green success or red error snackbar.

@@ -1,21 +1,126 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/constants/statuses.dart';
+import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../../../core/constants/statuses.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../blood_request/presentation/screens/blood_request_detail_screen.dart';
+import '../../donor/data/repositories/donor_repository_impl.dart';
+
+/// An open blood request marked Urgent, as shown in the list.
+class UrgentRequest {
+  const UrgentRequest({
+    required this.id,
+    required this.data,
+    required this.bloodType,
+    required this.hospital,
+    required this.units,
+    this.neededBy,
+    this.createdAt,
+  });
+
+  final String id;
+  final Map<String, dynamic> data;
+  final String bloodType;
+  final String hospital;
+  final int units;
+  final DateTime? neededBy;
+  final DateTime? createdAt;
+
+  static DateTime? _date(dynamic v) => v is Timestamp ? v.toDate() : null;
+
+  factory UrgentRequest.fromFirestore(String id, Map<String, dynamic> data) {
+    final units = data['unitsRequired'] ?? data['unitsNeeded'];
+    return UrgentRequest(
+      id: id,
+      data: data,
+      bloodType: (data['bloodType'] ?? '--').toString().trim().toUpperCase(),
+      hospital:
+          (data['hospitalName'] ??
+                  data['hospitalLocation'] ??
+                  data['hospital'] ??
+                  'Hospital not specified')
+              .toString(),
+      units: units is num ? units.toInt() : int.tryParse('$units') ?? 1,
+      neededBy: _date(
+        data['neededByDate'] ?? data['requiredDate'] ?? data['neededBy'],
+      ),
+      createdAt: _date(data['createdAt']),
+    );
+  }
+
+  /// Keeps urgent requests donors can still offer to, other than the
+  /// user's own, matching [bloodType] ('All' for any) and [search]
+  /// (hospital name). Soonest needed-by date first.
+  static List<UrgentRequest> filter(
+    Iterable<MapEntry<String, Map<String, dynamic>>> docs, {
+    String? currentUserId,
+    Set<String> ownRequestIds = const {},
+    String bloodType = 'All',
+    String search = '',
+  }) {
+    final query = search.trim().toLowerCase();
+    final list = <UrgentRequest>[];
+    for (final doc in docs) {
+      final data = doc.value;
+      if (data['urgency'] != RequestUrgency.urgent) continue;
+      if (!RequestStatus.isOpenToDonors(data['status']?.toString())) continue;
+      final owner = (data['userId'] ?? data['requesterId'])?.toString();
+      if (currentUserId != null && owner == currentUserId) continue;
+      if (ownRequestIds.contains(doc.key)) continue;
+
+      final request = UrgentRequest.fromFirestore(doc.key, data);
+      if (bloodType != 'All' && request.bloodType != bloodType) continue;
+      if (query.isNotEmpty && !request.hospital.toLowerCase().contains(query)) {
+        continue;
+      }
+      list.add(request);
+    }
+    list.sort((a, b) {
+      final an = a.neededBy, bn = b.neededBy;
+      if (an != null && bn != null && an != bn) return an.compareTo(bn);
+      if (an == null && bn != null) return 1;
+      if (an != null && bn == null) return -1;
+      final ac = a.createdAt, bc = b.createdAt;
+      if (ac == null || bc == null) return 0;
+      return bc.compareTo(ac);
+    });
+    return list;
+  }
+}
+
+/// Open blood requests marked Urgent, for anyone who may be able to help.
+///
+/// Reads the anonymised `request_summaries` with `urgency == 'Urgent'` (a
+/// single-field filter, so no composite index); status, own-request, blood
+/// type and search filters run on the device. Offering goes through
+/// [BloodRequestDetailScreen], which enforces the donor checks.
 class UrgentRequestsScreen extends StatefulWidget {
-  const UrgentRequestsScreen({super.key});
+  const UrgentRequestsScreen({
+    super.key,
+    this.requests,
+    this.currentUserId,
+    this.ownRequestIds,
+  });
+
+  /// Test hook: summary documents (id → data).
+  final Stream<List<MapEntry<String, Map<String, dynamic>>>>? requests;
+
+  /// Test hook: the user's own request ids.
+  final Stream<Set<String>>? ownRequestIds;
+
+  /// Test hook: overrides the signed-in user's id.
+  final String? currentUserId;
 
   @override
   State<UrgentRequestsScreen> createState() => _UrgentRequestsScreenState();
 }
 
 class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
-  String _selectedBloodType = 'All';
-  String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
-
-  final List<String> _bloodTypes = [
+  static const _bloodTypes = [
     'All',
     'A+',
     'A-',
@@ -27,16 +132,54 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
     'O-',
   ];
 
+  final _searchController = TextEditingController();
+  late final Stream<List<MapEntry<String, Map<String, dynamic>>>> _requests;
+  String? _uid;
+  late final Stream<Set<String>> _ownIds =
+      widget.ownRequestIds ??
+      (_uid == null
+          ? Stream.value(const <String>{})
+          : DonorRepositoryImpl().ownRequestIds(_uid!));
+  Set<String> _own = const {};
+  StreamSubscription<Set<String>>? _ownSub;
+  String _bloodType = 'All';
+  String _search = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _uid = widget.currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
+    _requests =
+        widget.requests ??
+        FirebaseFirestore.instance
+            .collection('request_summaries')
+            .where('urgency', isEqualTo: RequestUrgency.urgent)
+            .snapshots()
+            .map((s) => [for (final d in s.docs) MapEntry(d.id, d.data())]);
+    _ownSub = _ownIds.listen((ids) {
+      if (mounted) setState(() => _own = ids);
+    });
+  }
+
   @override
   void dispose() {
+    _ownSub?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _open(UrgentRequest request) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BloodRequestDetailScreen(requestId: request.id),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         title: const Text(
           'Urgent Blood Requests',
@@ -47,38 +190,29 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
       ),
       body: Column(
         children: [
-          // Filter & Search Header Section
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.white,
             child: Column(
               children: [
-                // Search Bar
                 TextField(
                   controller: _searchController,
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.toLowerCase().trim();
-                    });
-                  },
+                  onChanged: (v) => setState(() => _search = v),
                   decoration: InputDecoration(
-                    hintText: 'Search by hospital or location...',
+                    hintText: 'Search by hospital...',
                     prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    suffixIcon: _searchQuery.isNotEmpty
+                    suffixIcon: _search.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, color: Colors.grey),
                             onPressed: () {
                               _searchController.clear();
-                              setState(() => _searchQuery = '');
+                              setState(() => _search = '');
                             },
                           )
                         : null,
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 0,
-                      horizontal: 16,
-                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     filled: true,
-                    fillColor: AppColors.background,
+                    fillColor: const Color(0xFFF3F3F3),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -86,33 +220,28 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Blood Type Chip Filter Selector
                 SizedBox(
                   height: 40,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _bloodTypes.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final type = _bloodTypes[index];
-                      final isSelected = _selectedBloodType == type;
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final type = _bloodTypes[i];
+                      final selected = _bloodType == type;
                       return ChoiceChip(
                         label: Text(type),
-                        selected: isSelected,
+                        selected: selected,
                         selectedColor: AppColors.primaryRed,
-                        backgroundColor: AppColors.background,
+                        backgroundColor: const Color(0xFFF3F3F3),
+                        showCheckmark: false,
                         labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black87,
-                          fontWeight: isSelected
+                          color: selected ? Colors.white : Colors.black87,
+                          fontWeight: selected
                               ? FontWeight.bold
                               : FontWeight.normal,
                         ),
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() => _selectedBloodType = type);
-                          }
-                        },
+                        onSelected: (_) => setState(() => _bloodType = type),
                       );
                     },
                   ),
@@ -121,80 +250,47 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
             ),
           ),
           const Divider(height: 1),
-
-          // Streamed Requests List
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('blood_requests')
-                  .where('urgency', isEqualTo: RequestUrgency.urgent)
-                  .where('status', whereIn: RequestStatus.openToDonors)
-                  .snapshots(),
+            child: StreamBuilder<List<MapEntry<String, Map<String, dynamic>>>>(
+              stream: _requests,
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.hasError) {
+                  debugPrint('Urgent requests failed: ${snapshot.error}');
+                  return const _Centered(
+                    icon: Icons.cloud_off_outlined,
+                    text: 'Could not load urgent requests. Please try again.',
+                  );
+                }
+                if (!snapshot.hasData) {
                   return const Center(
                     child: CircularProgressIndicator(
                       color: AppColors.primaryRed,
                     ),
                   );
                 }
-
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Error loading requests: ${snapshot.error}'),
+                final requests = UrgentRequest.filter(
+                  snapshot.data!,
+                  currentUserId: _uid,
+                  ownRequestIds: _own,
+                  bloodType: _bloodType,
+                  search: _search,
+                );
+                if (requests.isEmpty) {
+                  return _Centered(
+                    icon: Icons.check_circle_outline,
+                    text: _bloodType == 'All' && _search.trim().isEmpty
+                        ? 'No urgent blood requests right now.'
+                        : 'No urgent blood requests match your filter.',
                   );
                 }
-
-                final docs = snapshot.data?.docs ?? [];
-
-                // Local filtering for blood type and location query
-                final filteredDocs = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final bloodType = data['bloodType'] ?? '';
-                  final location = (data['hospitalLocation'] ?? '')
-                      .toString()
-                      .toLowerCase();
-
-                  final matchesBloodType =
-                      _selectedBloodType == 'All' ||
-                      bloodType == _selectedBloodType;
-                  final matchesSearch =
-                      _searchQuery.isEmpty || location.contains(_searchQuery);
-
-                  return matchesBloodType && matchesSearch;
-                }).toList();
-
-                if (filteredDocs.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        'No urgent blood requests match your filter.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 16),
-                      ),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
+                return ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: filteredDocs.length,
-                  itemBuilder: (context, index) {
-                    final data =
-                        filteredDocs[index].data() as Map<String, dynamic>;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildRequestCard(
-                        bloodType: data['bloodType'] ?? '--',
-                        location:
-                            data['hospitalLocation'] ?? 'Unknown Location',
-                        units: '${data['unitsRequired'] ?? 1} Units required',
-                        contactNumber: data['contactNumber'] ?? 'N/A',
-                        notes: data['notes'] ?? '',
-                      ),
-                    );
-                  },
+                  itemCount: requests.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, i) => _UrgentCard(
+                    request: requests[i],
+                    onTap: () => _open(requests[i]),
+                  ),
                 );
               },
             ),
@@ -203,32 +299,30 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildRequestCard({
-    required String bloodType,
-    required String location,
-    required String units,
-    required String contactNumber,
-    required String notes,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
+class _UrgentCard extends StatelessWidget {
+  const _UrgentCard({required this.request, required this.onTap});
+
+  final UrgentRequest request;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final neededBy = request.neededBy;
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFEDEDED)),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          child: Row(
             children: [
               Container(
                 width: 52,
@@ -237,14 +331,13 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
                   color: AppColors.primaryRed.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Center(
-                  child: Text(
-                    bloodType,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryRed,
-                    ),
+                alignment: Alignment.center,
+                child: Text(
+                  request.bloodType,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryRed,
                   ),
                 ),
               ),
@@ -253,79 +346,79 @@ class _UrgentRequestsScreenState extends State<UrgentRequestsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDECEC),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        'URGENT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFC62828),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Text(
-                      location,
+                      request.hospital,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: 15,
                         color: Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      units,
+                      '${request.units} ${request.units == 1 ? 'unit' : 'units'} needed'
+                      '${neededBy == null ? '' : ' · by ${DateFormat('MMM d, yyyy').format(neededBy)}'}',
                       style: const TextStyle(
                         fontSize: 13,
                         color: Colors.black54,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
               ),
+              const Icon(Icons.chevron_right, color: Colors.black38),
             ],
           ),
-          if (notes.isNotEmpty) ...[
+        ),
+      ),
+    );
+  }
+}
+
+class _Centered extends StatelessWidget {
+  const _Centered({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Colors.black26),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                notes,
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-              ),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
             ),
           ],
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.phone_rounded, size: 16, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    contactNumber,
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ],
-              ),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Donate',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -1,11 +1,27 @@
 import 'package:flutter/material.dart';
-import '../../../profile/domain/user_profile_model.dart';
-import '../../../verification/presentation/screens/identity_verification_info_screen.dart';
 
+import '../../../profile/domain/user_profile_model.dart';
+import '../../../verification/domain/entities/account_verification_stage.dart';
+import '../../../verification/presentation/identity_verification_flow.dart';
+import '../../../verification/presentation/screens/identity_verification_info_screen.dart';
+import '../../../verification/presentation/widgets/verification_stage_builder.dart';
+
+/// Dashboard banner for users who are not verified yet.
+///
+/// "Not Verified" (no ID on file): Verify Now opens the intro screen, which
+/// runs the ID upload and then the selfie. "Face Not Verified" (ID on file):
+/// Verify Now goes straight to the selfie guide.
 class VerificationBanner extends StatefulWidget {
   final UserProfile? profile;
 
-  const VerificationBanner({super.key, required this.profile});
+  /// Test hook; see [VerificationStageBuilder.idSubmitted].
+  final Stream<bool>? idSubmitted;
+
+  const VerificationBanner({
+    super.key,
+    required this.profile,
+    this.idSubmitted,
+  });
 
   @override
   State<VerificationBanner> createState() => _VerificationBannerState();
@@ -14,11 +30,43 @@ class VerificationBanner extends StatefulWidget {
 class _VerificationBannerState extends State<VerificationBanner> {
   bool _isBannerMinimized = false;
 
+  Future<void> _verifyNow(AccountVerificationStage stage) async {
+    if (stage.needsIdUpload) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const IdentityVerificationInfoScreen(),
+        ),
+      );
+    } else {
+      await IdentityVerificationFlow.startFaceVerification(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.profile?.faceVerified == true) {
       return const SizedBox.shrink();
     }
+
+    return VerificationStageBuilder(
+      profile: widget.profile,
+      idSubmitted: widget.idSubmitted,
+      builder: (context, stage) {
+        if (stage == AccountVerificationStage.verified) {
+          return const SizedBox.shrink();
+        }
+        final message = stage.bannerMessage(
+          lastCheckFailed: widget.profile?.faceVerificationFailed ?? false,
+        );
+        return _buildBanner(stage, message);
+      },
+    );
+  }
+
+  Widget _buildBanner(AccountVerificationStage stage, String message) {
+    final icon = stage.needsIdUpload
+        ? Icons.badge_outlined
+        : Icons.face_outlined;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -44,13 +92,19 @@ class _VerificationBannerState extends State<VerificationBanner> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Verify Identity',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                Row(
+                  children: [
+                    Icon(icon, color: Colors.orangeAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      stage.label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
                 GestureDetector(
                   onTap: () => setState(() => _isBannerMinimized = true),
@@ -68,21 +122,15 @@ class _VerificationBannerState extends State<VerificationBanner> {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Complete your identity verification by finishing your selfie and ID check.',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                    message,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const IdentityVerificationInfoScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: () => _verifyNow(stage),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1565C0),
                     foregroundColor: Colors.white,
@@ -110,13 +158,13 @@ class _VerificationBannerState extends State<VerificationBanner> {
         secondChild: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.face_outlined, color: Colors.white, size: 18),
-                SizedBox(width: 8),
+                Icon(icon, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
                 Text(
-                  'Verify your face',
-                  style: TextStyle(
+                  stage.label,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,

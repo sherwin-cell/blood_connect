@@ -177,10 +177,6 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
   Future<void> _onContinuePressed() async {
     final provider = context.read<RequestIdVerificationProvider>();
     if (_preparing) return;
-    if (!provider.isFaceVerified) {
-      _message('Please complete face verification before submitting an ID.');
-      return;
-    }
     if (!provider.canSubmitId) {
       _message(
         provider.hasSubmittedId
@@ -272,11 +268,6 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                       _statusBanner(
                         'ID Already Submitted. Your saved ID can be reused for future donor applications and blood requests. No new upload is needed.',
                         Colors.green,
-                      )
-                    else if (!provider.isFaceVerified)
-                      _statusBanner(
-                        'Face Verification Required: Complete face verification before submitting an ID.',
-                        Colors.red,
                       ),
                     if (!submitted) ...[
                       _headerCard(),
@@ -347,18 +338,12 @@ class _SelectValidIdScreenState extends State<SelectValidIdScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: Text(
-                            busy
-                                ? 'Please wait...'
-                                : !provider.isFaceVerified
-                                ? 'Face Verify First'
-                                : 'Continue',
-                          ),
+                          child: Text(busy ? 'Please wait...' : 'Continue'),
                         ),
                       ),
                     ] else
                       const Text(
-                        'Your ID submission is saved. Return to the donor or blood request form to continue.',
+                        'Your ID submission is saved. Continue to the selfie step to finish identity verification.',
                         style: TextStyle(color: Colors.black54),
                       ),
                   ],

@@ -1,371 +1,390 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../data/repositories/donor_repository_impl.dart';
-import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
 import '../../../../core/constants/statuses.dart';
+import '../../../blood_request/domain/request_progress.dart';
+import '../../../blood_request/presentation/widgets/request_progress_widgets.dart';
+import '../../../chat/presentation/screens/match_chat_screen.dart';
 
-class MatchedDonorsScreen extends StatelessWidget {
-  final String requesterBloodType;
-  final DonorRepositoryImpl _donorRepository = DonorRepositoryImpl();
+/// Matching Center > Matched Donors: the donors PRC confirmed for the
+/// user's in-progress blood requests.
+///
+/// There is no donor directory: donors offer on a request, PRC confirms
+/// one (Item 5), and only then does the requester see the donor's name and
+/// contact and get a chat (created by the backend). Offers still waiting
+/// for PRC are shown as a count only.
+class MatchedDonorsScreen extends StatefulWidget {
+  const MatchedDonorsScreen({
+    super.key,
+    this.userId,
+    this.requests,
+    this.offersFor,
+    this.openChat,
+  });
 
-  MatchedDonorsScreen({super.key, required this.requesterBloodType});
+  /// Test hooks; default to the signed-in user and Firestore.
+  final String? userId;
+  final Stream<List<MapEntry<String, Map<String, dynamic>>>>? requests;
+  final Stream<List<MapEntry<String, Map<String, dynamic>>>> Function(
+    String requestId,
+  )?
+  offersFor;
+  final void Function(BuildContext context, String chatId, String title)?
+  openChat;
+
+  @override
+  State<MatchedDonorsScreen> createState() => _MatchedDonorsScreenState();
+}
+
+class _MatchedDonorsScreenState extends State<MatchedDonorsScreen> {
+  late final String? _uid =
+      widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
+
+  late final Stream<List<MapEntry<String, Map<String, dynamic>>>>? _requests =
+      widget.requests ??
+      (_uid == null
+          ? null
+          : FirebaseFirestore.instance
+                .collection('blood_requests')
+                .where('userId', isEqualTo: _uid)
+                .snapshots()
+                .map(
+                  (s) => [for (final d in s.docs) MapEntry(d.id, d.data())],
+                ));
+
+  final Map<String, Stream<List<MapEntry<String, Map<String, dynamic>>>>>
+  _offers = {};
+
+  Stream<List<MapEntry<String, Map<String, dynamic>>>> _offersFor(
+    String requestId,
+  ) => _offers.putIfAbsent(
+    requestId,
+    () =>
+        widget.offersFor?.call(requestId) ??
+        FirebaseFirestore.instance
+            .collection('blood_requests')
+            .doc(requestId)
+            .collection('offers')
+            .snapshots()
+            .map((s) => [for (final d in s.docs) MapEntry(d.id, d.data())]),
+  );
+
+  void _chat(String chatId, String title) {
+    final open = widget.openChat;
+    if (open != null) return open(context, chatId, title);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MatchChatScreen(chatId: chatId, title: title),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-
-    final normalizedRequesterBloodType = requesterBloodType
-        .trim()
-        .toUpperCase();
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         title: const Text(
           'Matched Donors',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
+        foregroundColor: Colors.black87,
       ),
-      body: Column(
-        children: [
-          // Requested blood type information
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.red.shade50,
-                  child: Text(
-                    normalizedRequesterBloodType.isEmpty
-                        ? 'N/A'
-                        : normalizedRequesterBloodType,
-                    style: TextStyle(
-                      color: AppColors.primaryRed,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Your Approved Blood Request',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'Showing approved and available donors with the exact same blood type.',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _donorRepository.getCompatibleDonorsStream(
-                normalizedRequesterBloodType,
-              ),
+      body: _requests == null
+          ? const Center(child: Text('Please sign in to see matched donors.'))
+          : StreamBuilder<List<MapEntry<String, Map<String, dynamic>>>>(
+              stream: _requests,
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Error loading donors: ${snapshot.error}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    ),
+                  return const Center(
+                    child: Text('Could not load your blood requests.'),
                   );
                 }
-
-                if (normalizedRequesterBloodType.isEmpty) {
-                  return _buildEmptyState(
-                    icon: Icons.bloodtype_outlined,
-                    message:
-                        'No blood type is available for your approved blood request.',
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: requestRed),
                   );
                 }
-
-                final allDocs = snapshot.data?.docs ?? [];
-
-                /*
-                 * A donor is eligible for this Matching Center list only when:
-                 *
-                 * 1. donorStatus == approved
-                 * 2. isDonor == true
-                 * 3. isAvailableForDonation == true
-                 * 4. bloodType exactly matches the request blood type
-                 * 5. donor is not the current user
-                 *
-                 * Blood type matching is exact.
-                 */
-                final docs = allDocs.where((doc) {
-                  final data = doc.data();
-
-                  final donorId = (data['userId'] ?? data['uid'] ?? doc.id)
-                      .toString();
-
-                  final donorStatus = (data['donorStatus'] ?? '')
-                      .toString()
-                      .trim()
-                      .toLowerCase();
-
-                  final isDonor = data['isDonor'] == true;
-
-                  final isAvailable = data['isAvailableForDonation'] == true;
-
-                  final donorBloodType = (data['bloodType'] ?? '')
-                      .toString()
-                      .trim()
-                      .toUpperCase();
-
-                  final isCurrentUser =
-                      currentUserId != null && donorId == currentUserId;
-
-                  final hasApprovedStatus = donorStatus == DonorStatus.approved;
-
-                  final exactBloodTypeMatch =
-                      donorBloodType == normalizedRequesterBloodType;
-
-                  return !isCurrentUser &&
-                      hasApprovedStatus &&
-                      isDonor &&
-                      isAvailable &&
-                      exactBloodTypeMatch;
-                }).toList();
-
-                if (docs.isEmpty) {
-                  return _buildEmptyState(
-                    icon: Icons.people_outline,
-                    message:
-                        'No approved and available donors with blood type '
-                        '$normalizedRequesterBloodType are available right now.',
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    final data = doc.data();
-
-                    final donorUserId =
-                        (data['userId'] ?? data['uid'] ?? doc.id).toString();
-
-                    final donorName =
-                        (data['fullName'] ?? data['name'] ?? 'Anonymous Donor')
-                            .toString();
-
-                    final donorBloodType = (data['bloodType'] ?? 'N/A')
-                        .toString()
-                        .trim()
-                        .toUpperCase();
-
-                    final chapter = (data['chapter'] ?? 'PRC Chapter')
-                        .toString();
-
-                    return _buildDonorCard(
-                      context: context,
-                      currentUserId: currentUserId,
-                      donorUserId: donorUserId,
-                      donorName: donorName,
-                      donorBloodType: donorBloodType,
-                      chapter: chapter,
-                    );
-                  },
+                final requests = [
+                  for (final doc in snapshot.data!)
+                    if (RequestStatus.isInProgress(
+                      doc.value['status']?.toString(),
+                    ))
+                      RequestProgress.fromFirestore(doc.key, doc.value),
+                ];
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  children: [
+                    const _Explainer(),
+                    const SizedBox(height: 16),
+                    if (requests.isEmpty)
+                      const _Empty()
+                    else
+                      for (final p in requests)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _RequestMatches(
+                            progress: p,
+                            offers: p.hasOffersStage ? _offersFor(p.id) : null,
+                            onChat: _chat,
+                          ),
+                        ),
+                  ],
                 );
               },
             ),
-          ),
-        ],
-      ),
     );
   }
+}
 
-  Widget _buildDonorCard({
-    required BuildContext context,
-    required String? currentUserId,
-    required String donorUserId,
-    required String donorName,
-    required String donorBloodType,
-    required String chapter,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-      ),
-      child: Row(
+class _Explainer extends StatelessWidget {
+  const _Explainer();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: requestSoftRed,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: const Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.verified_user_outlined, color: requestRed),
+        SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Donors with your blood type are alerted when PRC approves your '
+            'request. PRC screens each donor who offers; once PRC confirms '
+            'one, their contact details and a chat appear here.',
+            style: TextStyle(fontSize: 13),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 40),
+    child: Column(
+      children: [
+        Icon(Icons.people_outline, size: 56, color: Colors.black26),
+        SizedBox(height: 10),
+        Text(
+          'No active blood request',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 4),
+        Text(
+          'Matched donors appear here for requests PRC is working on.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.black54),
+        ),
+      ],
+    ),
+  );
+}
+
+class _RequestMatches extends StatelessWidget {
+  const _RequestMatches({
+    required this.progress,
+    required this.offers,
+    required this.onChat,
+  });
+
+  final RequestProgress progress;
+  final Stream<List<MapEntry<String, Map<String, dynamic>>>>? offers;
+  final void Function(String chatId, String title) onChat;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress;
+    final notified = p.data['matchingDonorsNotified'];
+    return RequestCardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CircleAvatar(
-            backgroundColor: Colors.red.shade50,
-            child: Text(
-              donorBloodType,
-              style: TextStyle(
-                color: AppColors.primaryRed,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  donorName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.black87,
-                  ),
+          Row(
+            children: [
+              BloodTypeBadge(p.bloodType),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.reference,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      p.hospital,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  'Blood Type: $donorBloodType',
-                  style: TextStyle(
-                    color: Colors.grey.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Chapter: $chapter',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                ),
-              ],
-            ),
+              ),
+              RequestStatusChip(p),
+            ],
           ),
-          OutlinedButton(
-            onPressed: currentUserId == null
-                ? null
-                : () => _startChat(
-                    context: context,
-                    currentUserId: currentUserId,
-                    donorUserId: donorUserId,
-                    donorName: donorName,
-                  ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primaryRed,
-              side: BorderSide(
-                color: AppColors.primaryRed.withValues(alpha: 0.5),
+          const Divider(height: 24),
+          if (offers == null)
+            const Text(
+              'PRC is still reviewing this request. Donors are alerted once '
+              'it is approved.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            )
+          else ...[
+            if (notified is num && notified > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  '${notified.toInt()} matching '
+                  '${notified == 1 ? 'donor was' : 'donors were'} alerted.',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Connect', style: TextStyle(fontSize: 11)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _startChat({
-    required BuildContext context,
-    required String currentUserId,
-    required String donorUserId,
-    required String donorName,
-  }) async {
-    if (currentUserId == donorUserId) {
-      return;
-    }
-
-    final ids = [currentUserId, donorUserId]..sort();
-    final chatId = ids.join('_');
-
-    try {
-      final chatDocRef = FirebaseFirestore.instance
-          .collection('chats')
-          .doc(chatId);
-
-      await chatDocRef.set({
-        'chatId': chatId,
-        'participants': [currentUserId, donorUserId],
-        'participantNames': {donorUserId: donorName},
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      if (!context.mounted) return;
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              PrcChatRoomScreen(chatId: chatId, otherUserName: donorName),
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not start chat: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Widget _buildEmptyState({required IconData icon, required String message}) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 60, color: Colors.grey.shade300),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontWeight: FontWeight.w500,
-              ),
+            StreamBuilder<List<MapEntry<String, Map<String, dynamic>>>>(
+              stream: offers,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Text('Could not load donor offers.');
+                }
+                final all = snapshot.data ?? const [];
+                final confirmed = [
+                  for (final o in all)
+                    if (OfferStatus.isConfirmed(o.value['status']?.toString()))
+                      o,
+                ];
+                final waiting = all
+                    .where((o) => o.value['status'] == OfferStatus.pending)
+                    .length;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (confirmed.isEmpty)
+                      Text(
+                        snapshot.hasData
+                            ? 'No donor confirmed by PRC yet.'
+                            : 'Loading donors...',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      )
+                    else
+                      for (final o in confirmed)
+                        _ConfirmedDonor(
+                          requestId: p.id,
+                          offerId: o.key,
+                          offer: o.value,
+                          onChat: onChat,
+                        ),
+                    if (waiting > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '$waiting ${waiting == 1 ? 'offer' : 'offers'} '
+                          'waiting for PRC review.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfirmedDonor extends StatelessWidget {
+  const _ConfirmedDonor({
+    required this.requestId,
+    required this.offerId,
+    required this.offer,
+    required this.onChat,
+  });
+
+  final String requestId;
+  final String offerId;
+  final Map<String, dynamic> offer;
+  final void Function(String chatId, String title) onChat;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (offer['donorName'] ?? 'Donor').toString();
+    final contact = (offer['donorContact'] ?? '').toString().trim();
+    final hasContact = contact.isNotEmpty && contact != 'N/A';
+    final donated = offer['status'] == OfferStatus.donated;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.verified, color: Color(0xFF2E7D32), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Text(
+                donated ? 'Donated' : 'Confirmed by PRC',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF2E7D32),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Blood type ${offer['donorBloodType'] ?? '—'}'
+            '${hasContact ? ' · $contact' : ''}',
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (hasContact)
+                OutlinedButton.icon(
+                  onPressed: () => launchUrl(Uri(scheme: 'tel', path: contact)),
+                  icon: const Icon(Icons.call, size: 16),
+                  label: const Text('Call'),
+                ),
+              if (hasContact) const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => onChat(matchChatId(requestId, offerId), name),
+                style: FilledButton.styleFrom(backgroundColor: requestRed),
+                icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                label: const Text('Chat'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

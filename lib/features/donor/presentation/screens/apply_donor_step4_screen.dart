@@ -8,6 +8,7 @@ import '../../../../core/services/firestore_service.dart';
 import '../../../verification/domain/entities/request_id_verification_data.dart';
 import '../../../donor/presentation/widgets/step_indicator.dart';
 import '../../../../core/constants/statuses.dart';
+import '../../../help/presentation/help_guides_screen.dart';
 
 class ApplyDonorStep4Screen extends StatefulWidget {
   final Map<String, dynamic> personalData;
@@ -403,9 +404,7 @@ class _ApplyDonorStep4ScreenState extends State<ApplyDonorStep4Screen> {
         backgroundColor: donorGreen,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
+        actions: [const HelpButton(section: HelpSectionTitles.eligibility)],
       ),
       body: _isLoadingStatus
           ? const Center(child: CircularProgressIndicator(color: donorGreen))

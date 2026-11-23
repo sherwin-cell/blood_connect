@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/blood_request/presentation/screens/blood_request_detail_screen.dart';
 import '../../features/blood_request/presentation/screens/request_offers_screen.dart';
 import '../../features/chat/presentation/screens/prc_chat_room_screen.dart';
+import '../../features/chat/presentation/screens/match_chat_screen.dart';
 import '../../features/donor/presentation/screens/my_offers_screen.dart';
 
 /// Root navigator, so notification taps can navigate from outside a widget.
@@ -86,12 +86,12 @@ class NotificationRouter {
           MaterialPageRoute(builder: (_) => const MyOffersScreen()),
         );
       case NotificationRoute.chat when chatId != null:
+        final name = _string(data['chatName']) ?? 'Chat';
         navigator.push(
           MaterialPageRoute(
-            builder: (_) => PrcChatRoomScreen(
-              chatId: chatId,
-              otherUserName: _string(data['chatName']) ?? 'Chat',
-            ),
+            builder: (_) => isMatchChat(chatId)
+                ? MatchChatScreen(chatId: chatId, title: name)
+                : PrcChatRoomScreen(chatId: chatId, otherUserName: name),
           ),
         );
       case NotificationRoute.activity:
@@ -101,35 +101,14 @@ class NotificationRouter {
     }
   }
 
+  /// Donor-facing request screen; it reads the anonymised summary itself
+  /// and says so when the request is no longer available.
   Future<void> _openRequest(NavigatorState navigator, String requestId) async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('blood_requests')
-          .doc(requestId)
-          .get();
-      final data = snapshot.data();
-      if (data == null) {
-        _showMessage('This blood request is no longer available.');
-        return;
-      }
-      navigator.push(
-        MaterialPageRoute(
-          builder: (_) =>
-              BloodRequestDetailScreen(requestId: requestId, requestData: data),
-        ),
-      );
-    } catch (e) {
-      debugPrint('Could not open request $requestId: $e');
-      _showMessage('Could not open this blood request.');
-    }
-  }
-
-  void _showMessage(String message) {
-    final context = rootNavigatorKey.currentContext;
-    if (context == null) return;
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => BloodRequestDetailScreen(requestId: requestId),
+      ),
+    );
   }
 
   /// `route` from the backend, or a fallback for records written before

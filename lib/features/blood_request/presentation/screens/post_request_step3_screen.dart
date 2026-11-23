@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/theme/app_theme.dart';
 import './post_request_step4_screen.dart';
 import '../widgets/step_indicator.dart';
+import '../../../help/presentation/help_guides_screen.dart';
 
 class PostRequestStep3Screen extends StatefulWidget {
   final String patientName;
@@ -380,9 +381,7 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
         centerTitle: true,
         backgroundColor: AppColors.primaryRed,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
+        actions: [const HelpButton(section: HelpSectionTitles.requestingBlood)],
       ),
 
       body: SingleChildScrollView(

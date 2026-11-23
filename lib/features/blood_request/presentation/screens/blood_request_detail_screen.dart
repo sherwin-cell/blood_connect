@@ -1,19 +1,32 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:flutter/material.dart';
+
 import '../../../donor/data/repositories/donor_repository_impl.dart';
-import '../../../../core/constants/statuses.dart';
+import '../../../donor/presentation/donor_offer_state.dart';
+import '../../domain/request_summary.dart';
+import '../widgets/request_progress_widgets.dart';
 
+/// Donor-facing view of one open blood request (from a "new matching
+/// request" notification, Urgent Requests or the Blood Requester list).
+///
+/// Shows only the anonymised `request_summaries` entry: no patient name,
+/// requester contact or documents. PRC shares contact details after it
+/// confirms a donor.
 class BloodRequestDetailScreen extends StatefulWidget {
-  final String requestId;
-  final Map<String, dynamic> requestData;
-
   const BloodRequestDetailScreen({
     super.key,
     required this.requestId,
-    required this.requestData,
+    this.summary,
+    this.offerState,
+    this.offer,
   });
+
+  final String requestId;
+
+  /// Test hooks; default to Firestore.
+  final Stream<RequestSummary?>? summary;
+  final Stream<DonorOfferState>? offerState;
+  final Future<void> Function(String requestId)? offer;
 
   @override
   State<BloodRequestDetailScreen> createState() =>
@@ -21,293 +34,246 @@ class BloodRequestDetailScreen extends StatefulWidget {
 }
 
 class _BloodRequestDetailScreenState extends State<BloodRequestDetailScreen> {
-  final DonorRepositoryImpl _donorRepository = DonorRepositoryImpl();
-  bool _isApplying = false;
+  DonorRepositoryImpl? _repo;
+  DonorRepositoryImpl get _repository => _repo ??= DonorRepositoryImpl();
 
-  void _showEligibilityModal() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 28),
-            SizedBox(width: 8),
-            Text('Medical Eligibility Notice', style: TextStyle(fontSize: 18)),
-          ],
-        ),
-        content: const Text(
-          'Please note that offering to donate does not guarantee medical eligibility. '
-          'You will undergo a standard medical screening at the designated blood donation center '
-          'before the actual donation procedure can proceed.',
-          style: TextStyle(fontSize: 14, color: Colors.black87),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryRed,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-              _confirmAndSubmitOffer();
-            },
-            child: const Text(
-              'I Understand & Confirm',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
+  late final Stream<RequestSummary?> _summary =
+      widget.summary ?? _repository.watchSummary(widget.requestId);
+  late final Stream<DonorOfferState>? _state =
+      widget.offerState ?? _defaultState();
+
+  bool _submitting = false;
+
+  Stream<DonorOfferState>? _defaultState() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null
+        ? null
+        : DonorOfferState.watch(uid, repository: _repository);
   }
 
-  Future<void> _confirmAndSubmitOffer() async {
-    setState(() => _isApplying = true);
-
+  Future<void> _offer() async {
+    if (!await confirmMedicalNotice(context) || !mounted) return;
+    setState(() => _submitting = true);
+    Object? error;
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('User not logged in');
-
-      // Fetch donor profile to verify approved status and grab credentials
-      final donorDoc = await FirebaseFirestore.instance
-          .collection('donors')
-          .doc(user.uid)
-          .get();
-
-      if (!donorDoc.exists ||
-          donorDoc.data()?['donorStatus'] != DonorStatus.approved) {
-        throw Exception(
-          'You must be an approved donor by the PRC to make an offer.',
+      final offer = widget.offer;
+      if (offer != null) {
+        await offer(widget.requestId);
+      } else {
+        await _repository.offerToDonate(
+          requestId: widget.requestId,
+          donorId: FirebaseAuth.instance.currentUser!.uid,
         );
       }
-
-      final donorData = donorDoc.data()!;
-      final donorName =
-          donorData['fullName'] ?? donorData['name'] ?? 'Unknown Donor';
-      final donorContact = donorData['contact'] ?? donorData['phone'] ?? 'N/A';
-      final donorBloodType = donorData['bloodType'] ?? 'O+';
-
-      // Submit offer into nested subcollection using repository (includes duplicate check)
-      await _donorRepository.offerToDonate(
-        requestId: widget.requestId,
-        donorId: user.uid,
-        donorName: donorName,
-        donorContact: donorContact,
-        donorBloodType: donorBloodType,
-      );
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Offer sent successfully! Waiting for PRC/Admin confirmation.',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pop(context);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isApplying = false);
+      error = e;
     }
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          error == null
+              ? 'Offer sent! PRC will review it and contact you.'
+              : error.toString().replaceFirst('Exception: ', ''),
+        ),
+        backgroundColor: error == null ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = widget.requestData;
-    final bloodType = data['bloodType'] ?? 'O+';
-    final hospital =
-        data['hospitalLocation'] ?? data['hospital'] ?? 'Unknown Hospital';
-    final units = data['unitsRequired'] ?? 1;
-    final contact = data['contactNumber'] ?? 'N/A';
-    final notes = data['notes'] ?? 'No additional notes provided.';
-    final status = data['status'] ?? RequestStatus.active;
-
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         title: const Text(
-          'Blood Request Details',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          'Blood Request',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: AppColors.primaryRed,
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+      body: StreamBuilder<RequestSummary?>(
+        stream: _summary,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Could not load this request.'));
+          }
+          if (!snapshot.hasData &&
+              snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: requestRed),
+            );
+          }
+          final r = snapshot.data;
+          if (r == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'This blood request is no longer available.',
+                  textAlign: TextAlign.center,
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Required Blood Type',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+            );
+          }
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+            children: [
+              RequestCardShell(
+                child: Row(
+                  children: [
+                    BloodTypeBadge(r.bloodType, size: 60),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            r.hospital,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${r.units} ${r.units == 1 ? 'unit' : 'units'}'
+                            '${r.component == null ? '' : ' · ${r.component}'}',
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                          if (r.isUrgent) ...[
+                            const SizedBox(height: 6),
+                            const UrgentBadge(),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        bloodType,
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryRed,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              RequestCardShell(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const RequestSectionTitle('Request Information'),
+                    RequestInfoRows(
+                      rows: [
+                        (
+                          'Blood Type Needed',
+                          RequestInfoRows.value(r.bloodType),
+                        ),
+                        (
+                          'Units Needed',
+                          RequestInfoRows.value(
+                            '${r.units} ${r.units == 1 ? 'unit' : 'units'}',
+                          ),
+                        ),
+                        if (r.component != null)
+                          ('Component', RequestInfoRows.value(r.component!)),
+                        ('Hospital', RequestInfoRows.value(r.hospital)),
+                        (
+                          'Date Needed',
+                          RequestInfoRows.value(formatRequestDate(r.neededBy)),
+                        ),
+                        (
+                          'Urgency Level',
+                          r.isUrgent
+                              ? const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: UrgentBadge(),
+                                )
+                              : RequestInfoRows.value('Normal'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: requestSoftRed,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.shield_outlined, color: requestRed),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'For the patient\'s privacy, PRC shares contact '
+                        'details only after it confirms your offer.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              StreamBuilder<DonorOfferState>(
+                stream: _state,
+                builder: (context, stateSnap) {
+                  final state = stateSnap.data;
+                  final reason = state?.reasonFor(r);
+                  final offered = state?.hasOffered(r.id) ?? false;
+                  final canOffer = state != null && reason == null;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (reason != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            reason,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: offered
+                                  ? Colors.green.shade700
+                                  : Colors.black54,
+                            ),
+                          ),
+                        ),
+                      SizedBox(
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: canOffer && !_submitting ? _offer : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: requestRed,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: _submitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Icon(
+                                  offered
+                                      ? Icons.check
+                                      : Icons.volunteer_activism,
+                                ),
+                          label: Text(
+                            offered ? 'Offer Sent' : 'Offer to Donate',
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      status.toUpperCase(),
-                      style: const TextStyle(
-                        color: AppColors.primaryRed,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDetailRow(
-                    Icons.local_hospital_rounded,
-                    'Hospital / Location',
-                    hospital,
-                  ),
-                  const Divider(height: 24),
-                  _buildDetailRow(
-                    Icons.water_drop_rounded,
-                    'Units Required',
-                    '$units Unit(s)',
-                  ),
-                  const Divider(height: 24),
-                  _buildDetailRow(
-                    Icons.phone_rounded,
-                    'Contact Number',
-                    contact,
-                  ),
-                  const Divider(height: 24),
-                  _buildDetailRow(
-                    Icons.note_rounded,
-                    'Additional Notes',
-                    notes,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isApplying ? null : _showEligibilityModal,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _isApplying
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'Offer to Help',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: AppColors.primaryRed, size: 22),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+                  );
+                },
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 }

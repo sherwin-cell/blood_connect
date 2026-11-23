@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/services/notification_router.dart';
 import 'widgets/notification_bell_button.dart';
 import '../../profile/domain/user_profile_model.dart';
-import '../../profile/presentation/profile_menu_screen.dart';
+import '../../profile/presentation/profile_screen.dart';
 import 'views/home_tab_view.dart';
 import 'views/activity_tab_view.dart';
 import 'views/history_tab_view.dart';
@@ -89,47 +88,32 @@ class _HomeDashboardState extends State<HomeDashboard> {
             ),
             actions: [
               NotificationBellButton(userId: user.uid),
-              // Stream raw user document snapshot to safely extract selfieImageUrl from faceVerification map
-              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .snapshots(),
-                builder: (context, docSnapshot) {
-                  final data = docSnapshot.data?.data();
-                  final faceVerificationMap =
-                      data?['faceVerification'] as Map<String, dynamic>?;
-                  final String? selfieUrl =
-                      faceVerificationMap?['selfieImageUrl']; //[cite: 4]
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => const ProfileMenuScreen(),
-                          ),
-                        );
-                      },
-                      child: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage:
-                            (selfieUrl != null && selfieUrl.isNotEmpty)
-                            ? NetworkImage(selfieUrl)
-                            : null,
-                        child: (selfieUrl == null || selfieUrl.isEmpty)
-                            ? const Icon(
-                                Icons.account_circle,
-                                color: Colors.black38,
-                                size: 28,
-                              )
-                            : null,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ProfileScreen(),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.grey.shade200,
+                    // Profile photo, else the verification selfie.
+                    backgroundImage: profile?.avatarUrl != null
+                        ? NetworkImage(profile!.avatarUrl!)
+                        : null,
+                    child: profile?.avatarUrl == null
+                        ? const Icon(
+                            Icons.account_circle,
+                            color: Colors.black38,
+                            size: 28,
+                          )
+                        : null,
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
             ],

@@ -1,5 +1,4 @@
 import 'dart:io';
-import '../entities/face_verification_data.dart';
 import '../entities/request_id_verification_data.dart';
 
 abstract class IVerificationRepository {
@@ -9,25 +8,10 @@ abstract class IVerificationRepository {
   /// Count faces in an image (selfie).
   Future<int> countFaces(File imageFile);
 
-  /// Crop the primary face from an image for face embedding comparison.
+  /// Crop the primary face from an image (selfie pre-check before upload).
   Future<File?> cropPrimaryFace(File imageFile);
 
-  /// Compares cropped ID face against cropped Selfie face using local embeddings.
-  Future<Map<String, dynamic>> compareFaces({
-    required File idCardFace,
-    required File selfieFace,
-  });
-
-  /// Uploads the selfie and stores automatic face verification on the user account.
-  Future<void> saveFaceVerification({
-    required String userId,
-    required FaceVerificationData data,
-  });
-
-  // ==========================================
-  // NEW: Get Face Verification status (Prerequisite)
-  // ==========================================
-  /// Checks if users/{uid}.faceVerified is true
+  /// Checks if users/{uid}.faceVerified is true (written only by the backend).
   Future<bool> getFaceVerificationStatus(String userId);
 
   /// Uploads request ID images to Cloudinary. Does not write Firestore.
@@ -43,14 +27,5 @@ abstract class IVerificationRepository {
   Future<String> saveOrUpdateIdSubmission({
     required String userId,
     required RequestIdVerificationData data,
-  });
-
-  /// Allows an approved donor to submit an offer to help an active blood request
-  Future<void> offerToDonate({
-    required String requestId,
-    required String donorId,
-    required String donorName,
-    required String donorContact,
-    required String donorBloodType,
   });
 }

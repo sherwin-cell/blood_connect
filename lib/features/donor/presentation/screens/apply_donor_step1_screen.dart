@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../donor/presentation/widgets/step_indicator.dart';
 import 'apply_donor_step2_screen.dart';
+import '../../../help/presentation/help_guides_screen.dart';
 
 class ApplyDonorStep1Screen extends StatefulWidget {
   const ApplyDonorStep1Screen({super.key});
@@ -366,9 +367,7 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
         backgroundColor: donorGreen,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
+        actions: [const HelpButton(section: HelpSectionTitles.eligibility)],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: donorGreen))

@@ -120,3 +120,36 @@ class BloodCompatibility {
     }
   }
 }
+
+/// Waiting period between whole-blood donations.
+///
+/// PRC records the authoritative `nextEligibleDonationDate` on
+/// `donors/{uid}` after each donation; this 56-day rule is only the fallback
+/// when PRC has not set one yet.
+abstract final class DonationInterval {
+  static const days = 56;
+
+  /// The first day the donor may give blood again.
+  ///
+  /// [prcNextEligible] (set by PRC) wins over the 56-day estimate from
+  /// [lastDonation]. Returns null when neither is known.
+  static DateTime? nextEligibleDate({
+    DateTime? lastDonation,
+    DateTime? prcNextEligible,
+  }) {
+    if (prcNextEligible != null) return _dateOnly(prcNextEligible);
+    if (lastDonation == null) return null;
+    final last = _dateOnly(lastDonation);
+    return DateTime(last.year, last.month, last.day + days);
+  }
+
+  /// Whether the waiting period is over on [today].
+  static bool isEligible(DateTime? nextEligible, {DateTime? today}) {
+    if (nextEligible == null) return true;
+    return !_dateOnly(
+      today ?? DateTime.now(),
+    ).isBefore(_dateOnly(nextEligible));
+  }
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+}

@@ -114,6 +114,7 @@ class PushNotificationService {
     }
 
     await _saveToken(uid, token);
+    await _applyAnnouncementPreference(uid);
 
     // Listen for token changes only after the initial save succeeds.
     await _tokenRefreshSubscription?.cancel();
@@ -144,6 +145,56 @@ class PushNotificationService {
     } catch (error, stackTrace) {
       debugPrint('FCM token registration failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  /// Removes this device's token from the user's account, so pushes for
+  /// that account stop arriving here after logging out. Call while still
+  /// signed in (the rules only let the owner delete it).
+  Future<void> unregisterCurrentDevice(String uid) async {
+    try {
+      final token = _registeredToken ?? await _messaging.getToken();
+      if (token != null && token.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('fcm_tokens')
+            .doc(token)
+            .delete();
+      }
+    } catch (error) {
+      debugPrint('Could not unregister this device: $error');
+    }
+    await clearRegisteredUser();
+  }
+
+  /// Subscribes or unsubscribes this device from PRC announcements, per the
+  /// user's Notification Settings.
+  Future<void> setAnnouncementsEnabled(bool enabled) async {
+    if (kIsWeb) return;
+    try {
+      if (enabled) {
+        await _messaging.subscribeToTopic(announcementsTopic);
+      } else {
+        await _messaging.unsubscribeFromTopic(announcementsTopic);
+      }
+    } catch (error) {
+      debugPrint('Could not update announcement subscription: $error');
+    }
+  }
+
+  /// Follows the signed-in user's "PRC announcements" switch.
+  Future<void> _applyAnnouncementPreference(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final prefs = doc.data()?['notificationPreferences'];
+      final enabled = prefs is! Map || prefs['announcements'] != false;
+      await setAnnouncementsEnabled(enabled);
+    } catch (error) {
+      debugPrint('Could not read announcement preference: $error');
     }
   }
 

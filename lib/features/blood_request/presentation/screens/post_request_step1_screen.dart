@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'post_request_step2_screen.dart';
 import '../widgets/step_indicator.dart';
+import '../../../help/presentation/help_guides_screen.dart';
 
 class PostRequestStep1Screen extends StatefulWidget {
   const PostRequestStep1Screen({super.key});
@@ -110,9 +111,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
         ),
         backgroundColor: AppColors.primaryRed,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
+        actions: [const HelpButton(section: HelpSectionTitles.requestingBlood)],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

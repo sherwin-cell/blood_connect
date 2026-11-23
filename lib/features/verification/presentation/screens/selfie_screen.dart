@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:provider/provider.dart';
 
+import '../../domain/repositories/i_verification_repository.dart';
+import '../identity_verification_flow.dart';
 import '../provider/verification_provider.dart';
 import 'face_verification_result_screen.dart';
 import '../widgets/selfie_camera_overlay.dart';
@@ -38,6 +40,9 @@ class _SelfieScreenState extends State<SelfieScreen>
   bool _isProcessingFrame = false;
   bool _isNavigatingAway = false;
 
+  /// Set once an ID is confirmed on file; the camera only starts after that.
+  bool _idReady = false;
+
   bool _isInsideOval = false;
   int _countdownSeconds = 3;
   LivenessStep _currentStep = LivenessStep.lookStraight;
@@ -53,7 +58,42 @@ class _SelfieScreenState extends State<SelfieScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _initDetector();
-    _initializeCamera();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureIdThenStart());
+  }
+
+  // ============================================================
+  // ID FIRST
+  // ============================================================
+
+  /// The backend compares the selfie with the saved ID photo, so the ID must
+  /// be on file before any selfie is taken. Opened without one (e.g. from an
+  /// old entry point), send the user to the ID upload first.
+  Future<void> _ensureIdThenStart() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
+    final repository = context.read<IVerificationRepository>();
+    if (!await IdentityVerificationFlow.hasIdOnFile(repository, user.uid)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upload your valid ID first, then take your selfie.'),
+        ),
+      );
+      final ready = await IdentityVerificationFlow.ensureIdOnFile(context);
+      if (!mounted) return;
+      if (!ready) {
+        Navigator.of(context).pop();
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    _idReady = true;
+    await _initializeCamera();
   }
 
   // ============================================================
@@ -85,7 +125,7 @@ class _SelfieScreenState extends State<SelfieScreen>
     if (state == AppLifecycleState.inactive) {
       cameraController.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      if (!_isReviewingPhoto && !_isProcessingPhoto) {
+      if (_idReady && !_isReviewingPhoto && !_isProcessingPhoto) {
         _initializeCamera();
       }
     }
@@ -391,75 +431,40 @@ class _SelfieScreenState extends State<SelfieScreen>
         _isNavigatingAway = true;
       });
 
-      final bool submitted = await provider.submitFaceVerification();
+      // The backend matches the selfie with the ID and records the result.
+      await provider.submitFaceVerification();
 
       if (!mounted) {
         return;
       }
 
-      final User? currentUser = FirebaseAuth.instance.currentUser;
-
-      if (currentUser == null) {
-        debugPrint('SELFIE: No authenticated Firebase user.');
-
+      if (FirebaseAuth.instance.currentUser == null) {
         Navigator.of(context).popUntil((route) => route.isFirst);
-
         return;
       }
 
-      // ----------------------------------------------------------
-      // OPEN FACE VERIFICATION RESULT
-      // ----------------------------------------------------------
-
-      debugPrint('');
-      debugPrint('====================================================');
-      debugPrint('SELFIE: Opening FaceVerificationResultScreen');
-      debugPrint('SELFIE: Face verification submitted = $submitted');
-      debugPrint('====================================================');
-
-      await Navigator.of(context).push(
+      // The result screen pops with true when the user wants another try.
+      final bool? retry = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => ChangeNotifierProvider.value(
             value: provider,
-            child: FaceVerificationResultScreen(success: submitted),
+            child: const FaceVerificationResultScreen(),
           ),
         ),
       );
 
-      // ----------------------------------------------------------
-      // FACE RESULT SCREEN CLOSED
-      // ----------------------------------------------------------
-
       if (!mounted) {
         return;
       }
 
-      debugPrint('');
-      debugPrint('====================================================');
-      debugPrint('SELFIE: FaceVerificationResultScreen closed.');
-      debugPrint('SELFIE: Verification flow finished.');
-      debugPrint('====================================================');
-
-      // Face verification + ID verification are both finished.
-      // Close SelfieScreen and return to HomeTabView.
-      if (mounted) {
-        debugPrint('SELFIE: Closing SelfieScreen.');
-        debugPrint('SELFIE: Returning to HomeTabView.');
-        Navigator.of(context).pop();
+      if (retry == true) {
+        setState(() => _isNavigatingAway = false);
+        await _onRetakePressed();
+        return;
       }
 
-      // ----------------------------------------------------------
-      // IMPORTANT
-      // ----------------------------------------------------------
-      //
-      // Do NOT push another screen here.
-      //
-      // FaceVerificationResultScreen handles the ID flow.
-      //
-      // Once the ID flow is submitted, the result screen closes
-      // and this route will be removed by the parent Home flow.
-      //
-      // ----------------------------------------------------------
+      // Verified, unverified for now, or limit reached: back to the dashboard.
+      Navigator.of(context).pop();
     } catch (e, stackTrace) {
       debugPrint('');
       debugPrint('====================================================');

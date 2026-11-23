@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/constants/statuses.dart';
+import 'notification_preferences.dart';
+
 class UserProfile {
   final String uid;
   final String email;
@@ -11,10 +14,30 @@ class UserProfile {
   final String? province;
   final String? municipality;
   final String? barangay;
+  final String? purok;
+  final String? nationality;
+
+  /// Profile picture chosen by the user (Cloudinary URL).
   final String? photoUrl;
 
-  /// Automatic account face verification. Admin review is request-level only.
+  /// Verification selfie, used as the avatar until a photo is chosen.
+  final String? selfieImageUrl;
+
+  final NotificationPreferences notificationPreferences;
+
+  /// Account identity verification: the backend matched the selfie with the
+  /// ID, or a PRC admin approved the account. Read-only for the app.
   final bool faceVerified;
+
+  /// `faceVerification.result` written by the backend or a PRC admin:
+  /// 'verified', 'failed', 'approved_by_admin' or 'rejected_by_admin'.
+  final String? faceVerificationResult;
+
+  /// The last face check did not pass and PRC has not approved the account.
+  bool get faceVerificationFailed =>
+      !faceVerified &&
+      (faceVerificationResult == FaceVerificationResult.failed ||
+          faceVerificationResult == FaceVerificationResult.rejectedByAdmin);
 
   final bool profileCompleted;
   final DateTime? createdAt;
@@ -31,14 +54,48 @@ class UserProfile {
     this.province,
     this.municipality,
     this.barangay,
+    this.purok,
+    this.nationality,
     this.photoUrl,
+    this.selfieImageUrl,
+    this.notificationPreferences = const NotificationPreferences(),
     this.faceVerified = false,
+    this.faceVerificationResult,
     this.profileCompleted = false,
     this.createdAt,
     this.updatedAt,
   });
 
   bool get isVerified => faceVerified;
+
+  /// Member code shown on cards, e.g. BC-IB1WA.
+  String get memberCode {
+    final id = uid.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    if (id.isEmpty) return 'BC-00000';
+    return 'BC-${id.length >= 5 ? id.substring(0, 5) : id.padRight(5, '0')}';
+  }
+
+  /// The picture to show for this user: their photo, else the selfie.
+  String? get avatarUrl {
+    for (final url in [photoUrl, selfieImageUrl]) {
+      if (url != null && url.trim().isNotEmpty) return url;
+    }
+    return null;
+  }
+
+  /// "Purok 3, Burabod, Sorsogon City, Sorsogon" from the parts present.
+  String get formattedAddress {
+    final purokText = purok?.trim() ?? '';
+    final parts = [
+      if (purokText.isNotEmpty)
+        purokText.toLowerCase().startsWith('purok')
+            ? purokText
+            : 'Purok $purokText',
+      for (final part in [barangay, municipality, province])
+        if (part != null && part.trim().isNotEmpty) part.trim(),
+    ];
+    return parts.join(', ');
+  }
 
   factory UserProfile.fromFirestore(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic field) {
@@ -49,10 +106,13 @@ class UserProfile {
       return null;
     }
 
-    final legacyStatus = (json['verificationStatus'] as String? ?? '')
-        .toLowerCase();
-    final faceVerified =
-        json['faceVerified'] as bool? ?? legacyStatus == 'approved';
+    // Only the backend (or a PRC admin) sets faceVerified; there is no
+    // fallback to the old client-reported verificationStatus.
+    final faceVerified = json['faceVerified'] == true;
+    final faceVerification = json['faceVerification'];
+    final faceVerificationResult = faceVerification is Map
+        ? faceVerification['result'] as String?
+        : null;
 
     return UserProfile(
       uid: json['uid'] as String? ?? '',
@@ -62,13 +122,23 @@ class UserProfile {
               as String,
       phoneNumber: json['phoneNumber'] as String? ?? '',
       gender: json['gender'] as String?,
-      birthDate: parseDate(json['birthDate']),
+      // Complete Profile and Edit Profile store `birthday` (YYYY-MM-DD).
+      birthDate: parseDate(json['birthDate'] ?? json['birthday']),
       bloodType: json['bloodType'] as String? ?? '',
       province: json['province'] as String?,
       municipality: json['municipality'] as String?,
       barangay: json['barangay'] as String?,
+      purok: json['purok'] as String?,
+      nationality: json['nationality'] as String?,
       photoUrl: json['photoUrl'] as String?,
+      selfieImageUrl: faceVerification is Map
+          ? faceVerification['selfieImageUrl'] as String?
+          : null,
+      notificationPreferences: NotificationPreferences.fromMap(
+        json[NotificationPreferences.field],
+      ),
       faceVerified: faceVerified,
+      faceVerificationResult: faceVerificationResult,
       profileCompleted:
           (json['profileCompleted'] ?? json['isProfileComplete']) as bool? ??
           false,

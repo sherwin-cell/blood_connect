@@ -1,22 +1,112 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import '../../../blood_request/domain/request_summary.dart';
+import '../../../blood_request/presentation/screens/blood_request_detail_screen.dart';
+import '../../../blood_request/presentation/widgets/request_progress_widgets.dart';
 import '../../data/repositories/donor_repository_impl.dart';
-import '../../../../core/constants/statuses.dart';
+import '../donor_offer_state.dart';
 
+const _green = Color(0xFF2E7D32);
+const _softGreen = Color(0xFFE8F5E9);
+const _blue = Color(0xFF1565C0);
+const _softBlue = Color(0xFFE3F2FD);
+
+const allBloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+/// Sort orders for the view-only list.
+enum RequestSort {
+  nearestDate('Nearest Date'),
+  newest('Newest First'),
+  urgentFirst('Urgent First');
+
+  const RequestSort(this.label);
+  final String label;
+}
+
+/// Splits open requests into ones the donor can respond to (exactly their
+/// blood type, as firestore.rules require) and read-only ones. The user's
+/// own requests are left out of both.
+class BloodRequestLists {
+  BloodRequestLists._(this.matched, this.viewOnly);
+
+  final List<RequestSummary> matched;
+  final List<RequestSummary> viewOnly;
+
+  factory BloodRequestLists.from(
+    List<RequestSummary> all, {
+    required String donorBloodType,
+    Set<String> ownRequestIds = const {},
+    String? bloodTypeFilter,
+    RequestSort sort = RequestSort.nearestDate,
+    bool urgentOnly = false,
+  }) {
+    final type = donorBloodType.trim().toUpperCase();
+    final open = [
+      for (final r in all)
+        if (r.isOpen && !ownRequestIds.contains(r.id)) r,
+    ];
+    final matched = [
+      for (final r in open)
+        if (r.bloodType == type) r,
+    ]..sort((a, b) => compare(RequestSort.nearestDate, a, b));
+    final viewOnly = [
+      for (final r in open)
+        if (r.bloodType != type &&
+            (bloodTypeFilter == null || r.bloodType == bloodTypeFilter) &&
+            (!urgentOnly || r.isUrgent))
+          r,
+    ]..sort((a, b) => compare(sort, a, b));
+    return BloodRequestLists._(matched, viewOnly);
+  }
+
+  static final _far = DateTime(9999);
+  static final _epoch = DateTime.fromMillisecondsSinceEpoch(0);
+
+  static int compare(RequestSort sort, RequestSummary a, RequestSummary b) {
+    int newest() => (b.createdAt ?? _epoch).compareTo(a.createdAt ?? _epoch);
+    int nearest() {
+      final c = (a.neededBy ?? _far).compareTo(b.neededBy ?? _far);
+      return c != 0 ? c : newest();
+    }
+
+    switch (sort) {
+      case RequestSort.nearestDate:
+        return nearest();
+      case RequestSort.newest:
+        return newest();
+      case RequestSort.urgentFirst:
+        if (a.isUrgent != b.isUrgent) return a.isUrgent ? -1 : 1;
+        return nearest();
+    }
+  }
+}
+
+/// Matching Center > Blood Requester: approved requests from the anonymised
+/// `request_summaries`.
+///
+/// Requests with the donor's blood type are listed under "Matched Blood
+/// Requests" and open [BloodRequestDetailScreen], where the donor offers via
+/// [DonorRepositoryImpl.offerToDonate]. Other blood types are shown
+/// read-only with a lock: firestore.rules reject offers on them.
 class CompatibleRequestsScreen extends StatefulWidget {
-  final String donorBloodType;
-  final String donorName;
-  final String donorContact;
-
   const CompatibleRequestsScreen({
     super.key,
     required this.donorBloodType,
-    required this.donorName,
-    required this.donorContact,
+    this.requests,
+    this.offerState,
+    this.offer,
   });
+
+  final String donorBloodType;
+
+  /// Test hooks; default to Firestore.
+  final Stream<List<RequestSummary>>? requests;
+  final Stream<DonorOfferState>? offerState;
+  final Future<void> Function(String requestId)? offer;
+
+  /// Matched requests shown before "View more".
+  static const collapsedCount = 2;
 
   @override
   State<CompatibleRequestsScreen> createState() =>
@@ -24,892 +114,522 @@ class CompatibleRequestsScreen extends StatefulWidget {
 }
 
 class _CompatibleRequestsScreenState extends State<CompatibleRequestsScreen> {
-  final DonorRepositoryImpl _donorRepository = DonorRepositoryImpl();
+  DonorRepositoryImpl? _repo;
+  DonorRepositoryImpl get _repository => _repo ??= DonorRepositoryImpl();
 
-  final Set<String> _submittedOffers = {};
+  late final String _bloodType = widget.donorBloodType.trim().toUpperCase();
+  late final Stream<List<RequestSummary>> _requests =
+      widget.requests ?? _repository.openSummaries();
+  late final Stream<DonorOfferState>? _state =
+      widget.offerState ?? _defaultState();
 
-  String get _normalizedDonorBloodType {
-    return widget.donorBloodType.trim().toUpperCase();
+  bool _expanded = false;
+  String? _typeFilter;
+  RequestSort _sort = RequestSort.nearestDate;
+  bool _urgentOnly = false;
+
+  Stream<DonorOfferState>? _defaultState() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null
+        ? null
+        : DonorOfferState.watch(uid, repository: _repository);
   }
 
-  String _normalizeBloodType(dynamic value) {
-    if (value == null) {
-      return '';
-    }
-
-    return value.toString().trim().toUpperCase();
-  }
-
-  String _getHospital(Map<String, dynamic> data) {
-    return (data['hospitalName'] ?? data['hospital'] ?? 'Hospital N/A')
-        .toString();
-  }
-
-  String _getNeededByDate(Map<String, dynamic> data) {
-    final value =
-        data['neededByDate'] ?? data['neededBy'] ?? data['requiredDate'];
-
-    if (value == null) {
-      return 'Date not specified';
-    }
-
-    if (value is Timestamp) {
-      final date = value.toDate();
-
-      return '${_monthName(date.month)} '
-          '${date.day}, '
-          '${date.year}';
-    }
-
-    return value.toString();
-  }
-
-  String _monthName(int month) {
-    const months = [
-      '',
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    if (month < 1 || month > 12) {
-      return '';
-    }
-
-    return months[month];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-
-    final donorBloodType = _normalizedDonorBloodType;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-
-      // ============================================================
-      // APP BAR
-      // ============================================================
-      appBar: AppBar(
-        title: const Text(
-          'Blood Requests',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-            fontSize: 17,
-          ),
+  void _open(RequestSummary request) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BloodRequestDetailScreen(
+          requestId: request.id,
+          summary: widget.requests == null ? null : Stream.value(request),
+          offerState: widget.offerState,
+          offer: widget.offer,
         ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-      ),
-
-      // ============================================================
-      // BODY
-      // ============================================================
-      body: Column(
-        children: [
-          // ----------------------------------------------------------
-          // MATCHING INFORMATION
-          // ----------------------------------------------------------
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.red.shade100),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Blood Requests ($donorBloodType only)',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Only approved blood requests with the exact same blood type are shown.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ----------------------------------------------------------
-          // MEDICAL CLEARANCE NOTICE
-          // ----------------------------------------------------------
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              border: Border.all(color: Colors.amber.shade200),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: Colors.amber.shade800,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Potential matches are based on the same blood type. '
-                    'Medical clearance and final confirmation are required by PRC.',
-                    style: TextStyle(
-                      color: Colors.amber.shade900,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ----------------------------------------------------------
-          // REQUEST LIST
-          // ----------------------------------------------------------
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _donorRepository.getCompatibleRequestsStream(
-                donorBloodType,
-              ),
-              builder: (context, snapshot) {
-                // ----------------------------------------------------
-                // LOADING
-                // ----------------------------------------------------
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                // ----------------------------------------------------
-                // ERROR
-                // ----------------------------------------------------
-
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 52,
-                            color: Colors.red.shade200,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Unable to load blood requests.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.black87,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                final allDocs = snapshot.data?.docs ?? [];
-
-                // ----------------------------------------------------
-                // FILTER REQUESTS
-                // ----------------------------------------------------
-                //
-                // A request is displayed only when:
-                //
-                // 1. It is not the current user's own request.
-                // 2. Status is ACTIVE (legacy 'approved' still accepted).
-                // 3. Blood type exactly matches the donor.
-                //
-                // Examples:
-                //
-                // Donor = A+
-                //
-                // A+ + approved -> SHOW
-                // A+ + pending  -> HIDE
-                // A+ + rejected -> HIDE
-                // O+ + approved  -> HIDE
-                // B+ + approved  -> HIDE
-                // AB+ + approved -> HIDE
-                // ----------------------------------------------------
-
-                final docs = allDocs.where((doc) {
-                  final reqData = doc.data();
-
-                  // ----------------------------------------------
-                  // CURRENT USER'S OWN REQUEST
-                  // ----------------------------------------------
-
-                  final requesterId =
-                      (reqData['userId'] ?? reqData['requesterId'])?.toString();
-
-                  if (requesterId == currentUserId) {
-                    return false;
-                  }
-
-                  // ----------------------------------------------
-                  // REQUEST STATUS
-                  // ----------------------------------------------
-
-                  final status = (reqData['status'] ?? '')
-                      .toString()
-                      .trim()
-                      .toLowerCase();
-
-                  if (!RequestStatus.isOpenToDonors(status)) {
-                    return false;
-                  }
-
-                  // ----------------------------------------------
-                  // EXACT BLOOD TYPE MATCH
-                  // ----------------------------------------------
-
-                  final requestBloodType = _normalizeBloodType(
-                    reqData['bloodType'],
-                  );
-
-                  return requestBloodType == donorBloodType;
-                }).toList();
-
-                // ----------------------------------------------------
-                // SORT REQUESTS
-                // ----------------------------------------------------
-
-                docs.sort((a, b) {
-                  final aCreatedAt = a.data()['createdAt'];
-
-                  final bCreatedAt = b.data()['createdAt'];
-
-                  if (aCreatedAt is Timestamp && bCreatedAt is Timestamp) {
-                    return bCreatedAt.compareTo(aCreatedAt);
-                  }
-
-                  if (aCreatedAt is Timestamp) {
-                    return -1;
-                  }
-
-                  if (bCreatedAt is Timestamp) {
-                    return 1;
-                  }
-
-                  return 0;
-                });
-
-                // ----------------------------------------------------
-                // NO MATCHES
-                // ----------------------------------------------------
-
-                if (docs.isEmpty) {
-                  return _buildEmptyState(donorBloodType);
-                }
-
-                // ----------------------------------------------------
-                // MATCHING REQUESTS
-                // ----------------------------------------------------
-
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final reqDoc = docs[index];
-                    final reqData = reqDoc.data();
-
-                    final requestId = reqDoc.id;
-
-                    final bloodType = _normalizeBloodType(reqData['bloodType']);
-
-                    final neededByDate = _getNeededByDate(reqData);
-
-                    final hospital = _getHospital(reqData);
-
-                    final hasOffered = _submittedOffers.contains(requestId);
-
-                    return _buildRequestCard(
-                      context: context,
-                      requestId: requestId,
-                      bloodType: bloodType,
-                      neededByDate: neededByDate,
-                      hospital: hospital,
-                      requestData: reqData,
-                      hasOffered: hasOffered,
-                      currentUserId: currentUserId,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }
 
-  // ================================================================
-  // REQUEST CARD
-  // ================================================================
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
+        toolbarHeight: 72,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Blood Requests',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 2),
+            Text(
+              'Browse and respond to approved blood requests from '
+              'PRC-Sorsogon.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+      body: StreamBuilder<DonorOfferState>(
+        stream: _state,
+        builder: (context, stateSnap) {
+          final state = stateSnap.data;
+          return StreamBuilder<List<RequestSummary>>(
+            stream: _requests,
+            builder: (context, snapshot) {
+              final children = <Widget>[
+                const _HelpBanner(),
+                if (state?.blockingReason != null) ...[
+                  const SizedBox(height: 10),
+                  _Notice(state!.blockingReason!),
+                ],
+                const SizedBox(height: 16),
+              ];
 
-  Widget _buildRequestCard({
-    required BuildContext context,
-    required String requestId,
-    required String bloodType,
-    required String neededByDate,
-    required String hospital,
-    required Map<String, dynamic> requestData,
-    required bool hasOffered,
-    required String? currentUserId,
-  }) {
+              if (snapshot.hasError) {
+                debugPrint('Blood requests failed: ${snapshot.error}');
+                children.add(
+                  const _Notice(
+                    'Could not load blood requests. Please try again later.',
+                  ),
+                );
+              } else if (!snapshot.hasData) {
+                children.add(
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: CircularProgressIndicator(color: requestRed),
+                    ),
+                  ),
+                );
+              } else {
+                final lists = BloodRequestLists.from(
+                  snapshot.data!,
+                  donorBloodType: _bloodType,
+                  ownRequestIds: state?.ownRequestIds ?? const {},
+                  bloodTypeFilter: _typeFilter,
+                  sort: _sort,
+                  urgentOnly: _urgentOnly,
+                );
+                children.addAll([
+                  _matchedCard(lists.matched, state),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Other Blood Requests',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  _filters(),
+                  const SizedBox(height: 10),
+                  if (lists.viewOnly.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text(
+                        'No other blood requests match these filters.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    )
+                  else
+                    for (final r in lists.viewOnly) _ViewOnlyRow(r),
+                  const SizedBox(height: 8),
+                  const _ViewOnlyInfo(),
+                ]);
+              }
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                children: children,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _matchedCard(List<RequestSummary> matched, DonorOfferState? state) {
+    const limit = CompatibleRequestsScreen.collapsedCount;
+    final hidden = matched.length - limit;
+    final shown = _expanded || hidden <= 0 ? matched : matched.take(limit);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: _softGreen,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _green.withValues(alpha: 0.25)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ----------------------------------------------------------
-          // REQUEST ID + BLOOD TYPE
-          // ----------------------------------------------------------
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.water_drop,
-                  color: AppColors.primaryRed,
-                  size: 21,
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
+              Icon(Icons.check_circle, color: _green),
+              SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      requestId,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black54,
+                      'Matched Blood Requests',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _green,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      'Approved Blood Request',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
-                      ),
+                      'Requests that match your blood type.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ],
                 ),
               ),
-
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  bloodType,
-                  style: TextStyle(
-                    color: AppColors.primaryRed,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          // ----------------------------------------------------------
-          // NEEDED BY DATE
-          // ----------------------------------------------------------
-          Row(
-            children: [
-              Icon(
-                Icons.calendar_today_outlined,
-                size: 16,
-                color: Colors.grey.shade600,
+          if (matched.isEmpty)
+            Text(
+              'No $_bloodType blood requests right now. We will notify you '
+              'when one is posted.',
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            )
+          else
+            for (final r in shown)
+              _MatchedRow(
+                request: r,
+                offered: state?.hasOffered(r.id) ?? false,
+                onTap: () => _open(r),
               ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  neededByDate,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 7),
-
-          // ----------------------------------------------------------
-          // HOSPITAL
-          // ----------------------------------------------------------
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.location_on_outlined,
-                size: 17,
-                color: Colors.grey.shade600,
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  hospital,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          // ----------------------------------------------------------
-          // VIEW DETAILS
-          // ----------------------------------------------------------
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () {
-                _showRequestDetails(
-                  context: context,
-                  requestId: requestId,
-                  requestData: requestData,
-                  hasOffered: hasOffered,
-                  currentUserId: currentUserId,
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryRed,
-                side: BorderSide(color: Colors.red.shade100),
-                backgroundColor: Colors.red.shade50,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'View Details',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 5),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 12,
-                    color: AppColors.primaryRed,
-                  ),
-                ],
-              ),
+          if (hidden > 0)
+            TextButton.icon(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              style: TextButton.styleFrom(foregroundColor: _green),
+              icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+              label: Text(_expanded ? 'Show less' : 'View more ($hidden)'),
             ),
-          ),
         ],
       ),
     );
   }
 
-  // ================================================================
-  // REQUEST DETAILS
-  // ================================================================
-
-  void _showRequestDetails({
-    required BuildContext context,
-    required String requestId,
-    required Map<String, dynamic> requestData,
-    required bool hasOffered,
-    required String? currentUserId,
-  }) {
-    final patientName = requestData['patientName']?.toString() ?? 'Patient';
-
-    final hospital = _getHospital(requestData);
-
-    final bloodType = _normalizeBloodType(requestData['bloodType']);
-
-    final unitsRequired = requestData['unitsRequired'] ?? 1;
-
-    final urgency = requestData['urgency']?.toString() ?? 'Normal';
-
-    final neededByDate = _getNeededByDate(requestData);
-
-    final relationship = requestData['relationship']?.toString() ?? '';
-
-    final notes = requestData['notes']?.toString() ?? '';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+  Widget _filters() {
+    final types = [
+      for (final t in allBloodTypes)
+        if (t != _bloodType) t,
+    ];
+    return Row(
+      children: [
+        Expanded(
+          child: _DropdownBox(
+            child: DropdownButton<String?>(
+              key: const Key('blood-type-filter'),
+              value: _typeFilter,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              items: [
+                const DropdownMenuItem(child: Text('All Blood Types')),
+                for (final t in types)
+                  DropdownMenuItem(value: t, child: Text(t)),
+              ],
+              onChanged: (v) => setState(() => _typeFilter = v),
             ),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _DropdownBox(
+            child: DropdownButton<RequestSort>(
+              key: const Key('sort-filter'),
+              value: _sort,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final s in RequestSort.values)
+                  DropdownMenuItem(value: s, child: Text(s.label)),
+              ],
+              onChanged: (v) => setState(() => _sort = v ?? _sort),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        PopupMenuButton<String>(
+          key: const Key('more-filters'),
+          tooltip: 'Filter options',
+          icon: Icon(
+            Icons.tune,
+            color: _urgentOnly ? requestRed : Colors.black54,
+          ),
+          onSelected: (_) => setState(() => _urgentOnly = !_urgentOnly),
+          itemBuilder: (_) => [
+            CheckedPopupMenuItem(
+              value: 'urgent',
+              checked: _urgentOnly,
+              child: const Text('Urgent only'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _HelpBanner extends StatelessWidget {
+  const _HelpBanner();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: requestSoftRed,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: const Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.favorite, color: requestRed),
+        SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Help Save Lives!',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: requestRed,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Below are blood requests that need donors. You may respond '
+                'to a request if you are willing to donate.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MatchedRow extends StatelessWidget {
+  const _MatchedRow({
+    required this.request,
+    required this.offered,
+    required this.onTap,
+  });
+
+  final RequestSummary request;
+  final bool offered;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              const _Drop(color: requestRed, background: requestSoftRed),
+              const SizedBox(width: 12),
+              Expanded(child: _RowText(request)),
+              if (offered)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
                   ),
-
-                  const SizedBox(height: 18),
-
-                  Row(
+                  decoration: BoxDecoration(
+                    color: _softGreen,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.water_drop,
-                          color: AppColors.primaryRed,
-                          size: 25,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              requestId,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            const Text(
-                              'Blood Request',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          bloodType,
-                          style: TextStyle(
-                            color: AppColors.primaryRed,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      Icon(Icons.check, size: 14, color: _green),
+                      SizedBox(width: 4),
+                      Text(
+                        'Offer Sent',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _green,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 20),
-
-                  _buildDetailRow(Icons.person_outline, 'Patient', patientName),
-
-                  _buildDetailRow(
-                    Icons.calendar_today_outlined,
-                    'Needed By',
-                    neededByDate,
-                  ),
-
-                  _buildDetailRow(
-                    Icons.location_on_outlined,
-                    'Hospital',
-                    hospital,
-                  ),
-
-                  _buildDetailRow(
-                    Icons.bloodtype_outlined,
-                    'Blood Type',
-                    bloodType,
-                  ),
-
-                  _buildDetailRow(
-                    Icons.water_drop_outlined,
-                    'Units Required',
-                    '$unitsRequired unit(s)',
-                  ),
-
-                  _buildDetailRow(Icons.priority_high, 'Urgency', urgency),
-
-                  if (relationship.isNotEmpty)
-                    _buildDetailRow(
-                      Icons.people_outline,
-                      'Relationship',
-                      relationship,
-                    ),
-
-                  if (notes.isNotEmpty)
-                    _buildDetailRow(Icons.notes_outlined, 'Notes', notes),
-
-                  const SizedBox(height: 16),
-
-                  // ------------------------------------------------
-                  // OFFER BUTTON
-                  // ------------------------------------------------
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: hasOffered || currentUserId == null
-                          ? null
-                          : () async {
-                              Navigator.pop(sheetContext);
-
-                              await _submitOffer(
-                                requestId: requestId,
-                                currentUserId: currentUserId,
-                              );
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryRed,
-                        disabledBackgroundColor: Colors.grey.shade300,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                      ),
-                      child: Text(
-                        hasOffered ? 'Offer Submitted' : 'Offer to Help',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              const Icon(Icons.chevron_right, color: Colors.black45),
+            ],
           ),
-        );
-      },
-    );
-  }
+        ),
+      ),
+    ),
+  );
+}
 
-  // ================================================================
-  // DETAIL ROW
-  // ================================================================
+class _ViewOnlyRow extends StatelessWidget {
+  const _ViewOnlyRow(this.request);
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  final RequestSummary request;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.black12),
+    ),
+    child: Row(
+      children: [
+        _Drop(color: Colors.grey.shade600, background: Colors.grey.shade200),
+        const SizedBox(width: 12),
+        Expanded(child: _RowText(request)),
+        Icon(
+          Icons.lock_outline,
+          color: Colors.grey.shade500,
+          semanticLabel: 'View only',
+        ),
+      ],
+    ),
+  );
+}
+
+class _RowText extends StatelessWidget {
+  const _RowText(this.request);
+
+  final RequestSummary request;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
         children: [
-          Icon(icon, size: 18, color: Colors.grey.shade600),
-          const SizedBox(width: 9),
-          SizedBox(
-            width: 95,
+          Flexible(
             child: Text(
-              label,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              request.reference,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ),
+          if (request.isUrgent) ...[
+            const SizedBox(width: 6),
+            const UrgentBadge(),
+          ],
         ],
       ),
-    );
-  }
-
-  // ================================================================
-  // EMPTY STATE
-  // ================================================================
-
-  Widget _buildEmptyState(String donorBloodType) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.bloodtype_outlined,
-                size: 42,
-                color: Colors.red.shade200,
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            Text(
-              'No $donorBloodType blood requests',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              'There are currently no approved blood requests that match your $donorBloodType blood type.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
+      const SizedBox(height: 2),
+      Text(
+        request.typeAndUnits,
+        style: const TextStyle(fontSize: 12, color: Colors.black54),
       ),
-    );
-  }
+    ],
+  );
+}
 
-  // ================================================================
-  // SUBMIT DONATION OFFER
-  // ================================================================
+class _Drop extends StatelessWidget {
+  const _Drop({required this.color, required this.background});
 
-  Future<void> _submitOffer({
-    required String requestId,
-    required String? currentUserId,
-  }) async {
-    if (currentUserId == null) {
-      return;
-    }
+  final Color color;
+  final Color background;
 
-    try {
-      await _donorRepository.offerToDonate(
-        requestId: requestId,
-        donorId: currentUserId,
-        donorName: widget.donorName,
-        donorContact: widget.donorContact,
-        donorBloodType: widget.donorBloodType,
-      );
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 40,
+    height: 40,
+    decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+    child: Icon(Icons.water_drop, color: color, size: 22),
+  );
+}
 
-      if (!mounted) {
-        return;
-      }
+class _DropdownBox extends StatelessWidget {
+  const _DropdownBox({required this.child});
 
-      setState(() {
-        _submittedOffers.add(requestId);
-      });
+  final Widget child;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Offer sent successfully! Waiting for PRC/Admin confirmation.',
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 44,
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: Colors.black12),
+    ),
+    child: DropdownButtonHideUnderline(child: child),
+  );
+}
+
+class _ViewOnlyInfo extends StatelessWidget {
+  const _ViewOnlyInfo();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _softBlue,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: const Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.info_outline, color: _blue),
+        SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'View-Only Requests',
+                style: TextStyle(fontWeight: FontWeight.bold, color: _blue),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Requests marked with a lock need a different blood type. '
+                'Following PRC matching rules, you can only respond to '
+                'requests that match your blood type.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
           ),
         ),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      ],
+    ),
+  );
+}
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit offer: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
+class _Notice extends StatelessWidget {
+  const _Notice(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF4E0),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.info_outline, color: Color(0xFFB26A00), size: 20),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+      ],
+    ),
+  );
 }

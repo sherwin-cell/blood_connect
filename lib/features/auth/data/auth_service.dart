@@ -76,6 +76,45 @@ class AuthService {
     await _auth.signOut();
   }
 
+  // --- Re-authentication (before sensitive actions such as deletion) ---
+
+  /// Confirms the signed-in email/password user's password.
+  Future<void> reauthenticateWithPassword(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw FirebaseAuthException(code: 'user-not-found');
+    }
+    await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+  }
+
+  /// Asks the signed-in Google user to pick their Google account again.
+  /// Returns false when they cancel the picker.
+  Future<bool> reauthenticateWithGoogle() async {
+    await _ensureInitialized();
+    final user = _auth.currentUser;
+    if (user == null) throw FirebaseAuthException(code: 'user-not-found');
+    try {
+      final googleUser = await _googleSignIn.authenticate();
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw FirebaseAuthException(code: 'invalid-credential');
+      }
+      await user.reauthenticateWithCredential(
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
+      return true;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
   // --- Google Sign-In (standard Firebase credential flow) ---
 
   /// Signs in with Google via Firebase Auth.

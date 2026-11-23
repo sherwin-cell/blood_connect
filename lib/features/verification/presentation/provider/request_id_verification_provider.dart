@@ -22,14 +22,12 @@ class RequestIdVerificationProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   String? _verificationStatus;
-  bool _isFaceVerified = false;
   bool _statusLoaded = false;
 
   RequestIdVerificationData get data => _data;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get verificationStatus => _verificationStatus;
-  bool get isFaceVerified => _isFaceVerified;
 
   /// Kept for compatibility with existing UI. This now means only that
   /// an ID was submitted, NOT that the account is fully verified.
@@ -45,12 +43,10 @@ class RequestIdVerificationProvider extends ChangeNotifier {
   /// ID approval queue in the one-time submission workflow.
   bool get isVerificationPending => false;
 
+  /// The ID comes first in identity verification (the backend compares the
+  /// selfie against it), so no face verification is required here.
   bool get canSubmitId =>
-      _statusLoaded &&
-      _isFaceVerified &&
-      !hasSubmittedId &&
-      !_isLoading &&
-      _errorMessage == null;
+      _statusLoaded && !hasSubmittedId && !_isLoading && _errorMessage == null;
 
   String? _normalizeStatus(String? status) {
     switch (status?.trim().toLowerCase()) {
@@ -77,7 +73,6 @@ class RequestIdVerificationProvider extends ChangeNotifier {
     _errorMessage = null;
     _statusLoaded = false;
     try {
-      _isFaceVerified = await repository.getFaceVerificationStatus(userId);
       final status = await repository.getIdVerificationStatus(userId);
       _verificationStatus = _normalizeStatus(status);
       _statusLoaded = true;
@@ -155,15 +150,10 @@ class RequestIdVerificationProvider extends ChangeNotifier {
     _errorMessage = null;
     try {
       if (!_statusLoaded) {
-        _isFaceVerified = await repository.getFaceVerificationStatus(userId);
         _verificationStatus = _normalizeStatus(
           await repository.getIdVerificationStatus(userId),
         );
         _statusLoaded = true;
-      }
-      if (!_isFaceVerified) {
-        _errorMessage = 'Complete face verification before submitting an ID.';
-        return false;
       }
       if (hasSubmittedId) {
         // No new upload is needed; existing ID will be reused.

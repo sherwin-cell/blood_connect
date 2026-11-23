@@ -1,3 +1,99 @@
+import 'package:flutter/material.dart';
+
+import '../../../../core/theme/app_theme.dart';
+
+/// Announcements (Item 14) is still under development: PRC cannot publish
+/// announcements yet, so this screen only says so. The original Firestore
+/// implementation is kept, commented out, below.
+class AnnouncementsScreen extends StatelessWidget {
+  const AnnouncementsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      appBar: AppBar(
+        title: const Text(
+          'Announcements',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryRed.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.campaign_outlined,
+                  size: 36,
+                  color: AppColors.primaryRed,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const UnderDevelopmentBadge(),
+              const SizedBox(height: 12),
+              const Text(
+                'Announcements are coming soon',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'PRC-Sorsogon advisories, blood drives and donation '
+                'campaigns will appear here once this feature is finished.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small amber "Under development" label.
+class UnderDevelopmentBadge extends StatelessWidget {
+  const UnderDevelopmentBadge({super.key, this.compact = false});
+
+  /// Shows "Soon" instead of the full label (for small tiles).
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: EdgeInsets.symmetric(
+      horizontal: compact ? 5 : 10,
+      vertical: compact ? 1 : 4,
+    ),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF0C2),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      compact ? 'Soon' : 'Under development',
+      style: TextStyle(
+        fontSize: compact ? 8 : 11,
+        fontWeight: FontWeight.bold,
+        color: const Color(0xFF8A5A00),
+      ),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Original implementation, kept for when Announcements is built.
+// ---------------------------------------------------------------------------
 // import 'package:flutter/material.dart';
 // import 'package:cloud_firestore/cloud_firestore.dart';
 // import '../../../../core/theme/app_theme.dart';

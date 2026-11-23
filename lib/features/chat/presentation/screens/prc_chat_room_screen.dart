@@ -3,6 +3,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 
+/// Quick-reply chips in Chat with PRC (Philippine Red Cross, Sorsogon
+/// Chapter): common blood donation and blood request questions.
+const prcQuickQuestions = [
+  'Am I eligible to donate blood?',
+  'Where and when can I donate?',
+  'What is the status of my blood request?',
+  'What documents do I need to request blood?',
+  'How long before I can donate again?',
+];
+
 class PrcChatRoomScreen extends StatefulWidget {
   final String chatId;
   final String otherUserName;
@@ -22,14 +32,6 @@ class _PrcChatRoomScreenState extends State<PrcChatRoomScreen> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
   bool _isInitialized = false;
-
-  // List of predicted quick-action questions
-  final List<String> _predictedQuestions = [
-    'How do I renew my PRC license?',
-    'How to register on LERIS?',
-    'What are the exam requirements?',
-    'How to replace a lost PRC ID?',
-  ];
 
   @override
   void initState() {
@@ -251,7 +253,7 @@ class _PrcChatRoomScreenState extends State<PrcChatRoomScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: _predictedQuestions.map((question) {
+                children: prcQuickQuestions.map((question) {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: ActionChip(

@@ -1,16 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../verification/domain/entities/account_verification_stage.dart';
+import '../../../verification/domain/repositories/i_verification_repository.dart';
 import '../../../profile/domain/user_profile_model.dart';
 import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
 import '../../../donor/presentation/screens/compatible_requests_screen.dart';
 import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
 import '../../../donor/presentation/screens/matched_donors_screen.dart';
 import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
-// import '../../../announcements/presentation/screens/announcements_screen.dart';
+import '../../../announcements/presentation/screens/announcements_screen.dart';
+import '../../../help/presentation/help_guides_screen.dart';
+import '../../../requests/presentation/urgent_requests_screen.dart';
 import '../../../verification/presentation/id_verification_flow.dart';
+import '../../../verification/presentation/identity_verification_flow.dart';
 import '../widgets/member_card.dart';
 import '../../../../core/constants/statuses.dart';
 
@@ -63,26 +69,31 @@ class HomeTabView extends StatelessWidget {
     debugPrint('isFaceVerified: $isFaceVerified');
 
     if (!isFaceVerified) {
-      debugPrint('FACE VERIFICATION FAILED.');
-      debugPrint('Showing Identity Verification Required dialog.');
+      // ID on file decides where the button goes: ID upload then selfie
+      // ("Not Verified"), or straight to the selfie ("Face Not Verified").
+      final hasSubmittedId = await IdentityVerificationFlow.hasIdOnFile(
+        context.read<IVerificationRepository>(),
+        user.uid,
+      );
+      if (!context.mounted) return;
+
+      final stage = AccountVerificationStage.of(
+        faceVerified: false,
+        hasSubmittedId: hasSubmittedId,
+      );
+      debugPrint('Verification stage: ${stage.name}');
 
       _showGateDialog(
         context,
-        title: 'Identity Verification Required',
-        message:
-            'You must complete identity verification before you can $actionName.',
-        buttonText: 'Complete Identity Verification',
+        title: stage.label,
+        message: stage.gateMessage(
+          actionName,
+          lastCheckFailed: profile?.faceVerificationFailed ?? false,
+        ),
+        buttonText: stage.actionLabel,
         onPressed: () async {
-          debugPrint('');
-          debugPrint('========== FACE VERIFICATION BUTTON PRESSED ==========');
-
-          // Keep your existing face verification navigation here.
-          //
-          // IMPORTANT:
-          // Do NOT start ID verification from this callback.
-          //
-          // Example:
-          // await FaceVerificationFlow.start(context);
+          if (!context.mounted) return;
+          await IdentityVerificationFlow.startForStage(context, stage);
         },
       );
 
@@ -605,7 +616,7 @@ class HomeTabView extends StatelessWidget {
         Expanded(
           child: _buildMatchingCard(
             title: 'Matched Donors',
-            subtitle: 'View approved donors for your approved blood request.',
+            subtitle: 'Donors PRC confirmed for your blood request.',
             icon: Icons.people_outline,
             onTap: () {
               debugPrint('========== MATCHED DONORS PRESSED ==========');
@@ -635,243 +646,79 @@ class HomeTabView extends StatelessWidget {
   // MATCHED DONORS
   // ============================================================
 
+  /// Donors PRC confirmed for the user's in-progress requests. The screen
+  /// explains what to do when there is no request yet.
   Future<void> _openMatchedDonors(BuildContext context) async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
+    if (FirebaseAuth.instance.currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please log in to view matched donors.')),
       );
-
       return;
     }
-
-    debugPrint(
-      'MATCHED DONORS: Loading approved requests '
-      'for user ${user.uid}',
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const MatchedDonorsScreen()),
     );
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return const Center(child: CircularProgressIndicator());
-      },
-    );
-
-    try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('blood_requests')
-          .where('userId', isEqualTo: user.uid)
-          .where('status', whereIn: RequestStatus.openToDonors)
-          .get();
-
-      if (!context.mounted) {
-        return;
-      }
-
-      Navigator.of(context).pop();
-
-      debugPrint(
-        'MATCHED DONORS: Approved requests found: '
-        '${querySnapshot.docs.length}',
-      );
-
-      if (querySnapshot.docs.isEmpty) {
-        _showMatchingMessage(
-          context,
-          title: 'No Approved Blood Request',
-          message:
-              'You need an approved blood request before we can find matched donors.',
-        );
-
-        return;
-      }
-
-      /*
-       * If a user has multiple approved requests, use the
-       * most recently created one.
-       *
-       * The blood type comes from the blood request itself,
-       * NOT from the user's profile.
-       */
-      final sortedDocs = [...querySnapshot.docs];
-
-      sortedDocs.sort((a, b) {
-        final aTimestamp = a.data()['createdAt'];
-
-        final bTimestamp = b.data()['createdAt'];
-
-        if (aTimestamp is Timestamp && bTimestamp is Timestamp) {
-          return bTimestamp.compareTo(aTimestamp);
-        }
-
-        if (aTimestamp is Timestamp) {
-          return -1;
-        }
-
-        if (bTimestamp is Timestamp) {
-          return 1;
-        }
-
-        return 0;
-      });
-
-      final requestData = sortedDocs.first.data();
-
-      final requestBloodType = (requestData['bloodType'] ?? '')
-          .toString()
-          .trim()
-          .toUpperCase();
-
-      final requestId = sortedDocs.first.id;
-
-      debugPrint('MATCHED DONORS: Selected request ID: $requestId');
-
-      debugPrint('MATCHED DONORS: Request blood type: $requestBloodType');
-
-      if (requestBloodType.isEmpty) {
-        _showMatchingMessage(
-          context,
-          title: 'Blood Type Unavailable',
-          message: 'Your approved blood request does not contain a blood type.',
-        );
-
-        return;
-      }
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              MatchedDonorsScreen(requesterBloodType: requestBloodType),
-        ),
-      );
-    } catch (e, stackTrace) {
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-
-      debugPrint('MATCHED DONORS: Error loading approved request.');
-
-      debugPrint('Error: $e');
-      debugPrint('StackTrace: $stackTrace');
-
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not load your approved blood request: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   // ============================================================
   // BLOOD REQUESTER
   // ============================================================
 
+  /// Open requests matching the donor's blood type. Only approved,
+  /// available donors past their next eligible date may open it.
   Future<void> _openBloodRequester(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
-
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please log in to view blood requests.')),
       );
-
       return;
     }
-
-    debugPrint(
-      'BLOOD REQUESTER: Loading donor application '
-      'for user ${user.uid}',
-    );
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) {
-        return const Center(child: CircularProgressIndicator());
-      },
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
-      final donorSnapshot = await FirebaseFirestore.instance
-          .collection('donors')
-          .doc(user.uid)
-          .get();
-
-      if (!context.mounted) {
-        return;
-      }
-
+      final donorData =
+          (await FirebaseFirestore.instance
+                  .collection('donors')
+                  .doc(user.uid)
+                  .get())
+              .data();
+      if (!context.mounted) return;
       Navigator.of(context).pop();
 
-      debugPrint(
-        'BLOOD REQUESTER: Donor document exists: '
-        '${donorSnapshot.exists}',
-      );
-
-      if (!donorSnapshot.exists || donorSnapshot.data() == null) {
+      if (donorData == null) {
         _showMatchingMessage(
           context,
           title: 'No Approved Donor Application',
           message:
-              'You need an approved donor application before you can view matching blood requests.',
+              'You need an approved donor application before you can view '
+              'matching blood requests.',
         );
-
         return;
       }
 
-      final donorData = donorSnapshot.data()!;
-
-      final donorStatus = (donorData['donorStatus'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-
-      final isDonor = donorData['isDonor'] == true;
-
-      final isAvailable = donorData['isAvailableForDonation'] == true;
+      // Same rule the offer uses: approved, available, past the next
+      // eligible donation date set by PRC.
+      final blockingReason = DonorEligibility.blockingReason(donorData);
+      if (blockingReason != null) {
+        _showMatchingMessage(
+          context,
+          title: 'Not Able to Donate Yet',
+          message: blockingReason,
+        );
+        return;
+      }
 
       final donorBloodType = (donorData['bloodType'] ?? '')
           .toString()
           .trim()
           .toUpperCase();
-
-      debugPrint('BLOOD REQUESTER: donorStatus=$donorStatus');
-
-      debugPrint('BLOOD REQUESTER: isDonor=$isDonor');
-
-      debugPrint('BLOOD REQUESTER: isAvailable=$isAvailable');
-
-      debugPrint('BLOOD REQUESTER: bloodType=$donorBloodType');
-
-      if (donorStatus != DonorStatus.approved || !isDonor) {
-        _showMatchingMessage(
-          context,
-          title: 'Donor Application Not Approved',
-          message:
-              'Your donor application must be approved by PRC before you can view matching blood requests.',
-        );
-
-        return;
-      }
-
-      if (!isAvailable) {
-        _showMatchingMessage(
-          context,
-          title: 'Donation Availability Disabled',
-          message:
-              'Your donor application is approved, but you are currently unavailable for donation.',
-        );
-
-        return;
-      }
-
       if (donorBloodType.isEmpty) {
         _showMatchingMessage(
           context,
@@ -879,42 +726,26 @@ class HomeTabView extends StatelessWidget {
           message:
               'Your approved donor application does not contain a blood type.',
         );
-
         return;
       }
 
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CompatibleRequestsScreen(
-            donorBloodType: donorBloodType,
-            donorName: (donorData['fullName'] ?? 'Donor').toString(),
-            donorContact:
-                (donorData['phoneNumber'] ?? donorData['contactNumber'] ?? '')
-                    .toString(),
-          ),
+          builder: (_) =>
+              CompatibleRequestsScreen(donorBloodType: donorBloodType),
         ),
       );
-    } catch (e, stackTrace) {
+    } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not load your donor application: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-
-      debugPrint('BLOOD REQUESTER: Error loading donor application.');
-
-      debugPrint('Error: $e');
-      debugPrint('StackTrace: $stackTrace');
-
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not load your donor application: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -1065,19 +896,31 @@ class HomeTabView extends StatelessWidget {
             );
           },
         ),
-        // const SizedBox(width: 8),
-        // _buildInfoServiceItem(
-        //   Icons.campaign_outlined,
-        //   'Announcements',
-        //   onTap: () {
-        //     debugPrint('========== ANNOUNCEMENTS PRESSED ==========');
-
-        // Navigator.push(
-        //   context,
-        //   MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
-        // );
-        //   },
-        // ),
+        const SizedBox(width: 8),
+        _buildInfoServiceItem(
+          Icons.priority_high_rounded,
+          'Urgent Requests',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const UrgentRequestsScreen()),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildInfoServiceItem(
+          Icons.menu_book_outlined,
+          'Help & Guides',
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const HelpGuidesScreen())),
+        ),
+        const SizedBox(width: 8),
+        _buildInfoServiceItem(
+          Icons.campaign_outlined,
+          'Announcements',
+          underDevelopment: true,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+          ),
+        ),
       ],
     );
   }
@@ -1090,6 +933,7 @@ class HomeTabView extends StatelessWidget {
     IconData icon,
     String label, {
     VoidCallback? onTap,
+    bool underDevelopment = false,
   }) {
     return Expanded(
       child: InkWell(
@@ -1114,6 +958,10 @@ class HomeTabView extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+              if (underDevelopment) ...[
+                const SizedBox(height: 4),
+                const UnderDevelopmentBadge(compact: true),
+              ],
             ],
           ),
         ),

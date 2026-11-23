@@ -1,223 +1,160 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../../../core/constants/statuses.dart';
+import '../../../blood_request/domain/request_summary.dart';
 
+/// Donor-side reads and writes.
+///
+/// Donors only see `request_summaries` (anonymised by PRC); full
+/// `blood_requests` are readable only by their owner and PRC.
 class DonorRepositoryImpl {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  DonorRepositoryImpl({FirebaseFirestore? firestore}) : _db = firestore;
 
-  // ================================================================
-  // DONOR -> APPROVED BLOOD REQUESTS
-  // ================================================================
+  final FirebaseFirestore? _db;
 
-  /// Returns blood requests with the EXACT SAME blood type
-  /// as the donor.
-  ///
-  /// Matching rule:
-  ///     donor blood type == request blood type
-  ///
-  /// Example:
-  ///     A+ donor  -> A+ requests only
-  ///     O+ donor  -> O+ requests only
-  ///     AB- donor -> AB- requests only
-  ///
-  /// The Firestore query filters only by bloodType.
-  /// The screen filters status == "active" (legacy "approved" accepted).
-  ///
-  /// We intentionally keep status filtering outside the query
-  /// to avoid requiring a composite Firestore index.
-  Stream<QuerySnapshot<Map<String, dynamic>>> getCompatibleRequestsStream(
-    String donorBloodType,
-  ) {
-    final normalizedBloodType = donorBloodType.trim().toUpperCase();
+  // Resolved lazily so screens can be built in tests without Firebase.
+  FirebaseFirestore get _firestore => _db ?? FirebaseFirestore.instance;
 
-    if (normalizedBloodType.isEmpty) {
-      return _firestore
-          .collection('blood_requests')
-          .where('bloodType', isEqualTo: '__NO_MATCH__')
-          .snapshots();
+  /// Name the donor gave in their application (`fullName`).
+  static String donorName(Map<String, dynamic> donor) =>
+      (donor['fullName'] ?? donor['name'] ?? 'Donor').toString().trim();
+
+  /// Mobile number from the application (`mobileNo`; older records used
+  /// other names). Empty when none is on file.
+  static String donorContact(Map<String, dynamic> donor) {
+    for (final key in [
+      'mobileNo',
+      'phoneNumber',
+      'contactNumber',
+      'telephone',
+    ]) {
+      final value = donor[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
     }
-
-    return _firestore
-        .collection('blood_requests')
-        .where('bloodType', isEqualTo: normalizedBloodType)
-        .snapshots();
+    return '';
   }
 
   // ================================================================
-  // REQUESTER -> APPROVED / AVAILABLE DONORS
+  // DONOR -> OPEN REQUESTS (anonymised summaries)
   // ================================================================
 
-  /// Returns donors with the EXACT SAME blood type
-  /// as the request.
-  ///
-  /// Matching rule:
-  ///     request blood type == donor blood type
-  ///
-  /// Example:
-  ///     A+ request  -> A+ donors only
-  ///     O+ request  -> O+ donors only
-  ///     AB- request -> AB- donors only
-  ///
-  /// The Firestore query filters only by bloodType.
-  ///
-  /// The screen must additionally require:
-  ///     donorStatus == "approved"
-  ///     isAvailableForDonation == true
-  ///
-  /// The current user is also excluded by the screen.
-  Stream<QuerySnapshot<Map<String, dynamic>>> getCompatibleDonorsStream(
-    String requestBloodType,
-  ) {
-    final normalizedBloodType = requestBloodType.trim().toUpperCase();
+  /// Every request open to donors, newest first. Donors offer only on
+  /// their own blood type (enforced by firestore.rules); the rest are shown
+  /// read-only. Sorted here so no extra composite index is needed.
+  Stream<List<RequestSummary>> openSummaries() => _firestore
+      .collection('request_summaries')
+      .where('status', whereIn: RequestStatus.openToDonors)
+      .snapshots()
+      .map((s) {
+        final list = [
+          for (final d in s.docs) RequestSummary.fromFirestore(d.id, d.data()),
+        ];
+        final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+        list.sort(
+          (a, b) => (b.createdAt ?? epoch).compareTo(a.createdAt ?? epoch),
+        );
+        return list;
+      });
 
-    if (normalizedBloodType.isEmpty) {
-      return _firestore
-          .collection('donors')
-          .where('bloodType', isEqualTo: '__NO_MATCH__')
-          .snapshots();
-    }
+  /// One summary, live (null once PRC removes it).
+  Stream<RequestSummary?> watchSummary(String requestId) => _firestore
+      .collection('request_summaries')
+      .doc(requestId)
+      .snapshots()
+      .map(
+        (d) => d.data() == null
+            ? null
+            : RequestSummary.fromFirestore(d.id, d.data()!),
+      );
 
-    return _firestore
-        .collection('donors')
-        .where('bloodType', isEqualTo: normalizedBloodType)
-        .snapshots();
-  }
+  /// Ids of the user's own requests, so they are not offered to them.
+  Stream<Set<String>> ownRequestIds(String uid) => _firestore
+      .collection('blood_requests')
+      .where('userId', isEqualTo: uid)
+      .snapshots()
+      .map((s) => {for (final d in s.docs) d.id});
+
+  /// The donor's own `donors/{uid}` record, live.
+  Stream<Map<String, dynamic>?> watchDonor(String uid) =>
+      _firestore.collection('donors').doc(uid).snapshots().map((d) => d.data());
 
   // ================================================================
   // OFFER TO DONATE
   // ================================================================
 
-  /// Creates an offer from an approved donor for an active
-  /// blood request.
+  /// Creates an offer from the signed-in approved donor for an open
+  /// request. The only way the app creates offers.
   ///
-  /// The caller is responsible for making sure:
-  /// - the donor is approved
-  /// - the donor is available
-  /// - the request is approved
-  /// - donor/request blood types are exactly equal
-  ///
-  /// This method prevents the same donor from having more than
-  /// one active offer for the same request.
+  /// Name, contact and blood type come from the donor's own application,
+  /// and request details from the anonymised summary. firestore.rules
+  /// re-check eligibility, the request status, the blood type and that the
+  /// donor is not the requester.
   Future<void> offerToDonate({
     required String requestId,
     required String donorId,
-    required String donorName,
-    required String donorContact,
-    required String donorBloodType,
   }) async {
-    final normalizedDonorBloodType = donorBloodType.trim().toUpperCase();
-
     if (requestId.trim().isEmpty) {
       throw Exception('Missing blood request ID.');
     }
-
     if (donorId.trim().isEmpty) {
       throw Exception('Missing donor ID.');
     }
 
-    if (normalizedDonorBloodType.isEmpty) {
-      throw Exception('Missing donor blood type.');
-    }
-
-    // --------------------------------------------------------------
-    // VERIFY DONOR ELIGIBILITY (set by PRC after each donation)
-    // --------------------------------------------------------------
-
-    final donorSnapshot = await _firestore
-        .collection('donors')
-        .doc(donorId)
-        .get();
-    final donorData = donorSnapshot.data();
-
+    final donorData = (await _firestore.collection('donors').doc(donorId).get())
+        .data();
     if (donorData == null) {
       throw Exception('Your donor record could not be found.');
     }
-
     final blockingReason = DonorEligibility.blockingReason(donorData);
     if (blockingReason != null) {
       throw Exception(blockingReason);
     }
-
-    final requestRef = _firestore.collection('blood_requests').doc(requestId);
-
-    // --------------------------------------------------------------
-    // VERIFY REQUEST
-    // --------------------------------------------------------------
-
-    final requestSnapshot = await requestRef.get();
-
-    if (!requestSnapshot.exists) {
-      throw Exception('Blood request no longer exists.');
-    }
-
-    final requestData = requestSnapshot.data();
-
-    if (requestData == null) {
-      throw Exception('Unable to read blood request.');
-    }
-
-    final requestStatus = (requestData['status'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    if (!RequestStatus.isOpenToDonors(requestStatus)) {
-      throw Exception(
-        'This blood request is no longer available for donation offers.',
-      );
-    }
-
-    // --------------------------------------------------------------
-    // VERIFY EXACT BLOOD TYPE MATCH
-    // --------------------------------------------------------------
-
-    final requestBloodType = (requestData['bloodType'] ?? '')
+    final donorBloodType = (donorData['bloodType'] ?? '')
         .toString()
         .trim()
         .toUpperCase();
 
-    if (requestBloodType.isEmpty ||
-        requestBloodType != normalizedDonorBloodType) {
+    final summaryData =
+        (await _firestore.collection('request_summaries').doc(requestId).get())
+            .data();
+    if (summaryData == null) {
+      throw Exception('This blood request is no longer available.');
+    }
+    final summary = RequestSummary.fromFirestore(requestId, summaryData);
+    if (!summary.isOpen) {
+      throw Exception(
+        'This blood request is no longer available for donation offers.',
+      );
+    }
+    if (summary.bloodType.isEmpty || summary.bloodType != donorBloodType) {
       throw Exception(
         'Your blood type does not exactly match this blood request.',
       );
     }
 
-    // --------------------------------------------------------------
-    // CHECK EXISTING ACTIVE OFFER
-    // --------------------------------------------------------------
-
-    final offersRef = requestRef.collection('offers');
+    final offersRef = _firestore
+        .collection('blood_requests')
+        .doc(requestId)
+        .collection('offers');
 
     final existingOffer = await offersRef
         .where('donorId', isEqualTo: donorId)
         .where('status', whereIn: OfferStatus.active)
         .limit(1)
         .get();
-
     if (existingOffer.docs.isNotEmpty) {
       throw Exception(
         'You have already submitted an active offer for this request.',
       );
     }
 
-    // --------------------------------------------------------------
-    // CREATE OFFER
-    // --------------------------------------------------------------
-
-    // Request details are copied onto the offer so the donor's
-    // "My offers" list can show them without reading every request.
     await offersRef.add({
       'requestId': requestId,
-      'requesterId': requestData['requesterId'] ?? requestData['userId'],
       'donorId': donorId,
-      'donorName': donorName.trim(),
-      'donorContact': donorContact.trim(),
-      'donorBloodType': normalizedDonorBloodType,
-      'requestBloodType': requestBloodType,
-      'component': requestData['component'],
-      'urgency': requestData['urgency'],
-      'neededByDate': requestData['neededByDate'],
-      'hospitalName': requestData['hospitalName'],
+      'donorName': donorName(donorData),
+      'donorContact': donorContact(donorData),
+      'donorBloodType': donorBloodType,
+      ...summary.offerFields(),
       'status': OfferStatus.pending,
       'createdAt': FieldValue.serverTimestamp(),
     });

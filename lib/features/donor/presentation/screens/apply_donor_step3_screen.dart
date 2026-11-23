@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../donor/presentation/widgets/step_indicator.dart';
 import 'apply_donor_step4_screen.dart';
+import '../../../help/presentation/help_guides_screen.dart';
 
 class ApplyDonorStep3Screen extends StatefulWidget {
   final Map<String, dynamic> personalData;
@@ -272,9 +273,7 @@ class _ApplyDonorStep3ScreenState extends State<ApplyDonorStep3Screen> {
         backgroundColor: donorGreen,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
+        actions: [const HelpButton(section: HelpSectionTitles.eligibility)],
       ),
       body: Form(
         key: _formKey,

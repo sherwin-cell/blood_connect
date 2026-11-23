@@ -1,8 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../features/profile/domain/user_profile_model.dart';
-
-import '../../features/verification/domain/entities/face_verification_data.dart';
 
 import '../../features/verification/domain/entities/request_id_verification_data.dart';
 import '../constants/statuses.dart';
@@ -188,55 +187,35 @@ class FirestoreService {
     return data['faceVerified'] as bool? ?? false;
   }
 
-  /// Stores automatic face-verification results on the user document only.
-
-  Future<void> saveFaceVerification({
-    required String userId,
-
-    required String selfieCloudinaryUrl,
-
-    required FaceVerificationData data,
-  }) async {
-    final now = FieldValue.serverTimestamp();
-
-    final result =
-        data.verificationResult ??
-        (data.hasDetectedFace && (data.faceMatchPassed ?? true)
-            ? FaceVerificationResult.verified
-            : FaceVerificationResult.failed);
-
-    final verified = result == FaceVerificationResult.verified;
-
-    await _firestore.collection('users').doc(userId).set({
-      'selfieImageUrl': selfieCloudinaryUrl,
-
-      'faceVerified': verified,
-
-      'faceVerification': {
-        'hasDetectedFace': data.hasDetectedFace,
-
-        'faceMatchConfidence': data.faceMatchConfidence,
-
-        'faceMatchPassed': data.faceMatchPassed,
-
-        'verificationProvider': data.verificationProvider ?? 'local_liveness',
-
-        'verificationResult': result,
-
-        'selfieImageUrl': selfieCloudinaryUrl,
-
-        'verifiedAt': now,
-      },
-
-      'updatedAt': now,
-    }, SetOptions(merge: true));
-  }
-
   // ==========================================
 
   // ID VERIFICATION STATUS & SUBMISSION
 
   // ==========================================
+
+  /// Live "has the user submitted an ID" (both images saved) for the
+  /// dashboard. Errors (offline, rules not yet deployed) read as false, so
+  /// the user is sent to the ID step, which re-checks before uploading.
+  Stream<bool> watchIdSubmitted(String userId) {
+    bool submitted(Map<String, dynamic>? data) {
+      if (data == null) return false;
+      final front = data['frontIdImageUrl'];
+      final back = data['backIdImageUrl'];
+      return front is String &&
+          front.trim().isNotEmpty &&
+          back is String &&
+          back.trim().isNotEmpty;
+    }
+
+    return _firestore
+        .collection('id_verifications')
+        .doc(userId)
+        .snapshots()
+        .map((snapshot) => submitted(snapshot.data()))
+        .handleError((Object error) {
+          debugPrint('Could not watch ID submission: $error');
+        });
+  }
 
   /// Returns 'submitted' when the user has already uploaded both ID images.
   /// Legacy records with status 'approved' are treated as submitted.
@@ -472,37 +451,5 @@ class FirestoreService {
     String userId,
   ) {
     return _firestore.collection('donors').doc(userId).snapshots();
-  }
-
-  /// Adds a donor's offer to help a specific blood request subcollection
-
-  Future<void> offerToDonate({
-    required String requestId,
-
-    required String donorId,
-
-    required String donorName,
-
-    required String donorContact,
-
-    required String donorBloodType,
-  }) async {
-    await _firestore
-        .collection('blood_requests')
-        .doc(requestId)
-        .collection('offers')
-        .add({
-          'donorId': donorId,
-
-          'donorName': donorName,
-
-          'donorContact': donorContact,
-
-          'donorBloodType': donorBloodType,
-
-          'status': OfferStatus.pending,
-
-          'createdAt': FieldValue.serverTimestamp(),
-        });
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/statuses.dart';
 import '../../../blood_request/presentation/screens/request_offers_screen.dart';
+import '../../../chat/presentation/screens/match_chat_screen.dart';
 import '../../../donor/data/repositories/donor_repository_impl.dart';
 import 'activity_helpers.dart';
 
@@ -53,7 +54,7 @@ class _MyOffersSectionState extends State<MyOffersSection> {
           'PRC will see that you are no longer available for this request.',
       confirmLabel: 'Withdraw',
     );
-    if (confirmed == null || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     final requestId =
         offer.data()['requestId'] as String? ??
@@ -68,6 +69,20 @@ class _MyOffersSectionState extends State<MyOffersSection> {
     if (mounted) {
       showActivityResult(context, error, 'Your offer was withdrawn.');
     }
+  }
+
+  void _openChat(QueryDocumentSnapshot<Map<String, dynamic>> offer) {
+    final requestId =
+        offer.data()['requestId'] as String? ??
+        offer.reference.parent.parent!.id;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MatchChatScreen(
+          chatId: matchChatId(requestId, offer.id),
+          title: 'Requester',
+        ),
+      ),
+    );
   }
 
   @override
@@ -134,12 +149,25 @@ class _MyOffersSectionState extends State<MyOffersSection> {
             OfferStatusChip(status: status),
           ],
         ),
-        trailing: OfferStatus.isActive(status)
-            ? TextButton(
+        trailing: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // PRC confirmed this donor: the backend opened a chat with
+            // the requester.
+            if (OfferStatus.isConfirmed(status))
+              TextButton.icon(
+                onPressed: () => _openChat(offer),
+                icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                label: const Text('Chat'),
+              ),
+            if (OfferStatus.isActive(status))
+              TextButton(
                 onPressed: () => _withdraw(offer),
                 child: const Text('Withdraw'),
-              )
-            : null,
+              ),
+          ],
+        ),
       ),
     );
   }

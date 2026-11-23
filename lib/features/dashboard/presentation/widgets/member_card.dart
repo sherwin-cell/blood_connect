@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../profile/domain/user_profile_model.dart';
+import '../../../verification/domain/entities/account_verification_stage.dart';
+import '../../../verification/presentation/widgets/verification_stage_builder.dart';
 
 class MemberCard extends StatelessWidget {
   final UserProfile? profile;
@@ -9,10 +11,7 @@ class MemberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = profile?.fullName ?? 'Ana Santos';
-    final bool isVerified = profile?.isVerified ?? false;
-    final String memberId = profile?.uid != null
-        ? 'BC-${profile!.uid.substring(0, 5).toUpperCase()}'
-        : 'BC-00214';
+    final String memberId = profile?.memberCode ?? 'BC-00000';
 
     return Container(
       width: double.infinity,
@@ -45,25 +44,35 @@ class MemberCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          isVerified ? Icons.check_circle : Icons.error_outline,
-                          color: isVerified
-                              ? Colors.lightGreenAccent
-                              : Colors.orangeAccent,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isVerified ? 'Face Verified' : 'Face not verified',
-                          style: TextStyle(
-                            color: isVerified ? Colors.white : Colors.white70,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                    // Not Verified / Face Not Verified / Verified.
+                    VerificationStageBuilder(
+                      profile: profile,
+                      builder: (context, stage) {
+                        final verified =
+                            stage == AccountVerificationStage.verified;
+                        return Row(
+                          children: [
+                            Icon(
+                              verified
+                                  ? Icons.check_circle
+                                  : Icons.error_outline,
+                              color: verified
+                                  ? Colors.lightGreenAccent
+                                  : Colors.orangeAccent,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              stage.label,
+                              style: TextStyle(
+                                color: verified ? Colors.white : Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),

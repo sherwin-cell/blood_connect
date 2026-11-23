@@ -4,6 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import './post_request_step3_screen.dart';
 import '../widgets/step_indicator.dart';
 import '../../../../core/constants/statuses.dart';
+import '../../../help/presentation/help_guides_screen.dart';
 
 class PostRequestStep2Screen extends StatefulWidget {
   final String patientName;
@@ -142,9 +143,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
         ),
         backgroundColor: AppColors.primaryRed,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
+        actions: [const HelpButton(section: HelpSectionTitles.requestingBlood)],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import 'face_verification_instructions_screen.dart';
+import '../identity_verification_flow.dart';
 
 class IdentityVerificationInfoScreen extends StatelessWidget {
   const IdentityVerificationInfoScreen({super.key});
@@ -49,7 +49,8 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Complete your selfie and upload a valid ID in one guided flow.',
+                'Upload a valid ID first, then take a selfie. We match your '
+                'face to your ID photo.',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: Colors.black54,
@@ -73,23 +74,25 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                   children: [
                     _buildStepItem(
                       '1',
-                      'Take a selfie',
-                      'Follow the live face verification steps',
-                    ),
-                    _buildStepItem(
-                      '2',
                       'Choose a valid ID',
                       'Select the government-issued ID type you will upload',
                     ),
                     _buildStepItem(
-                      '3',
+                      '2',
                       'Upload front and back',
-                      'Capture both sides clearly before continuing',
+                      'Capture both sides clearly. Skipped if your ID is '
+                          'already on file',
+                    ),
+                    _buildStepItem(
+                      '3',
+                      'Take a selfie',
+                      'Follow the live face steps in good light',
                     ),
                     _buildStepItem(
                       '4',
-                      'Review and submit',
-                      'Finish the identity check in one guided flow',
+                      'Get verified',
+                      'Your selfie is matched to your ID photo. You have 5 '
+                          'tries a day',
                       isLast: true,
                     ),
                   ],
@@ -100,13 +103,20 @@ class IdentityVerificationInfoScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 46,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const FaceVerificationInstructionsScreen(),
-                      ),
-                    );
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    final thisRoute = ModalRoute.of(context);
+                    // ID first, then selfie.
+                    await IdentityVerificationFlow.start(context);
+                    // Remove only this intro screen, wherever it now sits.
+                    // start() can return while the selfie camera is open
+                    // (the guide replaces itself with it), so popping the
+                    // top route here would close the camera.
+                    if (navigator.mounted &&
+                        thisRoute != null &&
+                        thisRoute.isActive) {
+                      navigator.removeRoute(thisRoute);
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFC62828),

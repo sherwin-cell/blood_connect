@@ -1,44 +1,19 @@
-import '../../../../core/constants/statuses.dart';
-
+/// The selfie captured on the device, before it is sent to the backend.
+///
+/// The verification result itself lives on users/{uid} (faceVerified and the
+/// faceVerification map), written only by the backend.
 class FaceVerificationData {
   final String? selfiePath;
+
+  /// On-device pre-check found a face (usability only, not verification).
   final bool hasDetectedFace;
-  final double? faceMatchConfidence;
-  final bool? faceMatchPassed;
-  final String? verificationProvider;
-  final String? verificationResult;
-  final DateTime? verifiedAt;
 
-  const FaceVerificationData({
-    this.selfiePath,
-    this.hasDetectedFace = false,
-    this.faceMatchConfidence,
-    this.faceMatchPassed,
-    this.verificationProvider,
-    this.verificationResult,
-    this.verifiedAt,
-  });
+  const FaceVerificationData({this.selfiePath, this.hasDetectedFace = false});
 
-  bool get isVerified =>
-      verificationResult == FaceVerificationResult.verified && hasDetectedFace;
-
-  FaceVerificationData copyWith({
-    String? selfiePath,
-    bool? hasDetectedFace,
-    double? faceMatchConfidence,
-    bool? faceMatchPassed,
-    String? verificationProvider,
-    String? verificationResult,
-    DateTime? verifiedAt,
-  }) {
+  FaceVerificationData copyWith({String? selfiePath, bool? hasDetectedFace}) {
     return FaceVerificationData(
       selfiePath: selfiePath ?? this.selfiePath,
       hasDetectedFace: hasDetectedFace ?? this.hasDetectedFace,
-      faceMatchConfidence: faceMatchConfidence ?? this.faceMatchConfidence,
-      faceMatchPassed: faceMatchPassed ?? this.faceMatchPassed,
-      verificationProvider: verificationProvider ?? this.verificationProvider,
-      verificationResult: verificationResult ?? this.verificationResult,
-      verifiedAt: verifiedAt ?? this.verifiedAt,
     );
   }
 }

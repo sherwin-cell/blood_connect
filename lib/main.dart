@@ -8,9 +8,8 @@ import 'core/services/firestore_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/notification_router.dart';
 
-import 'features/verification/domain/services/i_face_embedding_service.dart';
-import 'features/verification/data/services/tflite_face_embedding_service.dart';
 import 'features/verification/data/services/cloudinary_service.dart';
+import 'features/verification/data/services/face_verification_api.dart';
 import 'features/verification/data/services/face_detector_service.dart';
 import 'features/verification/data/repositories/verification_repository_impl.dart';
 import 'features/verification/domain/repositories/i_verification_repository.dart';
@@ -38,18 +37,12 @@ Future<void> main() async {
   // 3. Initialize push notifications and notification listeners.
   await PushNotificationService.instance.initialize();
 
-  // 4. Initialize the face embedding service.
-  final tfliteService = TFLiteFaceEmbeddingService();
-  await tfliteService.initialize();
-
-  // 5. Start the application.
-  runApp(BloodConnectApp(faceEmbeddingService: tfliteService));
+  // 4. Start the application.
+  runApp(const BloodConnectApp());
 }
 
 class BloodConnectApp extends StatelessWidget {
-  final IFaceEmbeddingService faceEmbeddingService;
-
-  const BloodConnectApp({super.key, required this.faceEmbeddingService});
+  const BloodConnectApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -60,26 +53,23 @@ class BloodConnectApp extends StatelessWidget {
         Provider<CloudinaryService>(create: (_) => CloudinaryService()),
         Provider<FaceDetectorService>(create: (_) => FaceDetectorService()),
 
-        // Face embedding service.
-        Provider<IFaceEmbeddingService>.value(value: faceEmbeddingService),
+        // Backend face matching (POST /api/verification/face).
+        Provider<FaceVerificationApi>(create: (_) => FaceVerificationApi()),
 
         // Verification repository.
-        ProxyProvider4<
+        ProxyProvider3<
           FaceDetectorService,
           CloudinaryService,
           FirestoreService,
-          IFaceEmbeddingService,
           IVerificationRepository
         >(
-          update:
-              (context, faceDetector, cloudinary, firestore, faceEmbedding, _) {
-                return VerificationRepositoryImpl(
-                  faceDetectorService: faceDetector,
-                  cloudinaryService: cloudinary,
-                  firestoreService: firestore,
-                  faceEmbeddingService: faceEmbedding,
-                );
-              },
+          update: (context, faceDetector, cloudinary, firestore, _) {
+            return VerificationRepositoryImpl(
+              faceDetectorService: faceDetector,
+              cloudinaryService: cloudinary,
+              firestoreService: firestore,
+            );
+          },
         ),
 
         // Verification state provider.
@@ -89,9 +79,14 @@ class BloodConnectApp extends StatelessWidget {
         >(
           create: (context) => VerificationProvider(
             repository: context.read<IVerificationRepository>(),
+            api: context.read<FaceVerificationApi>(),
           ),
-          update: (_, repository, previous) {
-            return previous ?? VerificationProvider(repository: repository);
+          update: (context, repository, previous) {
+            return previous ??
+                VerificationProvider(
+                  repository: repository,
+                  api: context.read<FaceVerificationApi>(),
+                );
           },
         ),
       ],
