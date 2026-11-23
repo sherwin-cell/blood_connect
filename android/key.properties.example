@@ -1,0 +1,13 @@
+# Copy to android/key.properties (git-ignored) and fill in. Keep the keystore
+# and these passwords safe and backed up: Play needs the same upload key for
+# every update.
+#
+# Create the upload keystore once (outside the repo is safest):
+#   keytool -genkey -v -keystore C:\Users\<you>\keys\blood-connect-upload.jks ^
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# storeFile is relative to android/ (or an absolute path).
+storeFile=C:/Users/<you>/keys/blood-connect-upload.jks
+storePassword=<keystore password>
+keyAlias=upload
+keyPassword=<key password>

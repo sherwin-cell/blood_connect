@@ -4,7 +4,7 @@
       "android": {
         "default": {
           "projectId": "blood-connect-12ac2",
-          "appId": "1:394558242984:android:c5b84458c7404eb98c029d",
+          "appId": "1:394558242984:android:ba06ee2f823ca2d58c029d",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -12,7 +12,7 @@
         "lib/firebase_options.dart": {
           "projectId": "blood-connect-12ac2",
           "configurations": {
-            "android": "1:394558242984:android:c5b84458c7404eb98c029d",
+            "android": "1:394558242984:android:ba06ee2f823ca2d58c029d",
             "ios": "1:394558242984:ios:08021bf451cc9f6b8c029d",
             "macos": "1:394558242984:ios:08021bf451cc9f6b8c029d",
             "web": "1:394558242984:web:9ba9085bac8c24eb8c029d",

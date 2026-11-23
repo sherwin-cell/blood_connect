@@ -1,5 +1,6 @@
 
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Internet access for Firebase and API requests -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -7,12 +8,25 @@
     <!-- Android 13+ notification permission -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The camera plugin declares RECORD_AUDIO for video; the app only takes
+         photos (every CameraController uses enableAudio: false). -->
+    <uses-permission
+        android:name="android.permission.RECORD_AUDIO"
+        tools:node="remove" />
+
+    <!-- Only Android 12 and older need this for the file/photo pickers;
+         Android 13+ uses the system pickers, which need no permission. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:replace="android:maxSdkVersion" />
+
     <application
         android:label="Blood-Connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:largeHeap="true"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <!-- Default channel used for FCM notification messages -->
         <meta-data

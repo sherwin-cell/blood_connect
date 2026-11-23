@@ -1,12 +1,13 @@
 # blood_connect
 
-A new Flutter project.
+Blood-Connect mobile app (Philippine Red Cross, Sorsogon Chapter): blood
+requests, donor applications and donor matching.
 
 ## Running against the backend
 
-Identity verification sends the selfie to `blood_connect_backend`
-(`POST /api/verification/face`). Its address is set at build time, never
-hard-coded:
+Identity verification (`POST /api/verification/face`) and the private ID /
+Blood Request Form uploads (`POST /api/files/{kind}`) go to
+`blood_connect_backend`. Its address is set at build time, never hard-coded:
 
 ```bash
 # Android emulator -> backend on this PC
@@ -15,8 +16,31 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8000
 ```
 
-Without it the app still runs, but face verification reports that it is
-not set up. Verification order is enforced: valid ID first, then selfie.
+Plain `http://` works only in debug and profile builds
+(`android/app/src/debug|profile/AndroidManifest.xml`). Release builds are
+HTTPS-only (`usesCleartextTraffic="false"`), so they need the deployed
+backend's `https://` URL.
+
+Without it the app still runs, but face verification and ID / BRF uploads
+report that they are not set up. Verification order is enforced: valid ID
+first, then selfie.
+
+## Google Play release
+
+- Application ID: `com.bloodconnect.sorsogon` (permanent once published).
+  `google-services.json` and `lib/firebase_options.dart` must be generated
+  for this ID (`flutterfire configure`).
+- Signing: copy `android/key.properties.example` to `android/key.properties`
+  (git-ignored) and point it at your upload keystore. Without it, release
+  builds are debug-signed and Play rejects them.
+- Add the upload key's and Play App Signing key's SHA-1 / SHA-256 to the
+  Android app in Firebase (Google Sign-In), and the SHA-256 values to
+  `assetlinks.json` on blood-connect-12ac2.web.app (verified app links).
+
+```bash
+flutter build appbundle --release --dart-define=API_BASE_URL=https://<backend host>
+# -> build/app/outputs/bundle/release/app-release.aab
+```
 
 ## Getting Started
 
