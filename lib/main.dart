@@ -8,7 +8,7 @@ import 'core/services/firestore_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/notification_router.dart';
 
-import 'features/verification/data/services/cloudinary_service.dart';
+import 'core/services/secure_upload_api.dart';
 import 'features/verification/data/services/face_verification_api.dart';
 import 'features/verification/data/services/face_detector_service.dart';
 import 'features/verification/data/repositories/verification_repository_impl.dart';
@@ -50,7 +50,8 @@ class BloodConnectApp extends StatelessWidget {
       providers: [
         // Core services.
         Provider<FirestoreService>(create: (_) => FirestoreService()),
-        Provider<CloudinaryService>(create: (_) => CloudinaryService()),
+        // Private ID / Blood Request Form uploads (POST /api/files/{kind}).
+        Provider<SecureUploadApi>(create: (_) => SecureUploadApi()),
         Provider<FaceDetectorService>(create: (_) => FaceDetectorService()),
 
         // Backend face matching (POST /api/verification/face).
@@ -59,14 +60,14 @@ class BloodConnectApp extends StatelessWidget {
         // Verification repository.
         ProxyProvider3<
           FaceDetectorService,
-          CloudinaryService,
+          SecureUploadApi,
           FirestoreService,
           IVerificationRepository
         >(
-          update: (context, faceDetector, cloudinary, firestore, _) {
+          update: (context, faceDetector, secureUploads, firestore, _) {
             return VerificationRepositoryImpl(
               faceDetectorService: faceDetector,
-              cloudinaryService: cloudinary,
+              secureUploadApi: secureUploads,
               firestoreService: firestore,
             );
           },

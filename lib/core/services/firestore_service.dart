@@ -39,44 +39,6 @@ class FirestoreService {
     return UserProfile.fromFirestore(data);
   }
 
-  /// Looks up an existing Blood-Connect profile by email (case-insensitive).
-
-  Future<UserProfile?> findUserProfileByEmail(String email) async {
-    final normalized = email.trim().toLowerCase();
-
-    if (normalized.isEmpty) return null;
-
-    final snapshot = await _firestore
-        .collection('users')
-        .where('email', isEqualTo: normalized)
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      // Legacy profiles may have been stored with original casing
-
-      final fallback = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: email.trim())
-          .limit(1)
-          .get();
-
-      if (fallback.docs.isEmpty) return null;
-
-      final data = fallback.docs.first.data();
-
-      data['uid'] = data['uid'] ?? fallback.docs.first.id;
-
-      return UserProfile.fromFirestore(data);
-    }
-
-    final data = snapshot.docs.first.data();
-
-    data['uid'] = data['uid'] ?? snapshot.docs.first.id;
-
-    return UserProfile.fromFirestore(data);
-  }
-
   /// Creates initial user profile if missing.
 
   /// Does not overwrite [profileCompleted] or other fields on repeat sign-ins.

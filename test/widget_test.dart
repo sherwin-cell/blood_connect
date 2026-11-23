@@ -42,7 +42,7 @@ void main() {
   );
 
   testWidgets(
-    'Identity verification screen presents a combined selfie and ID flow',
+    'Identity verification screen explains the ID-first flow',
     (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: IdentityVerificationInfoScreen()),
@@ -51,10 +51,13 @@ void main() {
       expect(find.text('Identity Verification'), findsAtLeastNWidgets(1));
       expect(
         find.text(
-          'Complete your selfie and upload a valid ID in one guided flow.',
+          'Upload a valid ID first, then take a selfie. We match your '
+          'face to your ID photo.',
         ),
         findsOneWidget,
       );
+      expect(find.text('Upload front and back'), findsOneWidget);
+      expect(find.text('Take a selfie'), findsOneWidget);
       expect(find.text('Continue'), findsOneWidget);
     },
   );

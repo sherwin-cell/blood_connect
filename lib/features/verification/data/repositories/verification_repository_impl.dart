@@ -3,17 +3,17 @@ import 'dart:io';
 import '../../../../core/services/firestore_service.dart';
 import '../../domain/entities/request_id_verification_data.dart';
 import '../../domain/repositories/i_verification_repository.dart';
-import '../services/cloudinary_service.dart';
+import '../../../../core/services/secure_upload_api.dart';
 import '../services/face_detector_service.dart';
 
 class VerificationRepositoryImpl implements IVerificationRepository {
   final FaceDetectorService faceDetectorService;
-  final CloudinaryService cloudinaryService;
+  final SecureUploadApi secureUploadApi;
   final FirestoreService firestoreService;
 
   VerificationRepositoryImpl({
     required this.faceDetectorService,
-    required this.cloudinaryService,
+    required this.secureUploadApi,
     required this.firestoreService,
   });
 
@@ -42,12 +42,20 @@ class VerificationRepositoryImpl implements IVerificationRepository {
     required String frontIdPath,
     String? backIdPath,
   }) async {
-    final frontUrl = await cloudinaryService.uploadImage(File(frontIdPath));
+    // Private uploads through the backend: these are secure:// references,
+    // not public links (see SecureUploadApi).
+    final frontUrl = await secureUploadApi.upload(
+      File(frontIdPath),
+      SecureUploadKind.idFront,
+    );
 
     String? backUrl;
 
     if (backIdPath != null && backIdPath.isNotEmpty) {
-      backUrl = await cloudinaryService.uploadImage(File(backIdPath));
+      backUrl = await secureUploadApi.upload(
+        File(backIdPath),
+        SecureUploadKind.idBack,
+      );
     }
 
     return (frontUrl: frontUrl, backUrl: backUrl);

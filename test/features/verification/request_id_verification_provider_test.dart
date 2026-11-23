@@ -17,18 +17,6 @@ class _FakeVerificationRepository implements IVerificationRepository {
   Future<File?> cropPrimaryFace(File imageFile) async => imageFile;
 
   @override
-  Future<Map<String, dynamic>> compareFaces({
-    required File idCardFace,
-    required File selfieFace,
-  }) async => {'success': true};
-
-  @override
-  Future<void> saveFaceVerification({
-    required String userId,
-    required dynamic data,
-  }) async {}
-
-  @override
   Future<bool> getFaceVerificationStatus(String userId) async => true;
 
   @override
@@ -36,8 +24,8 @@ class _FakeVerificationRepository implements IVerificationRepository {
     required String frontIdPath,
     String? backIdPath,
   }) async => (
-    frontUrl: 'https://example.com/front.jpg',
-    backUrl: 'https://example.com/back.jpg',
+    frontUrl: 'secure://image/blood_connect_private/u1/id_front/a.jpg',
+    backUrl: 'secure://image/blood_connect_private/u1/id_back/b.jpg',
   );
 
   @override
@@ -48,15 +36,6 @@ class _FakeVerificationRepository implements IVerificationRepository {
     required String userId,
     required RequestIdVerificationData data,
   }) async => 'submission-123';
-
-  @override
-  Future<void> offerToDonate({
-    required String requestId,
-    required String donorId,
-    required String donorName,
-    required String donorContact,
-    required String donorBloodType,
-  }) async {}
 }
 
 void main() {

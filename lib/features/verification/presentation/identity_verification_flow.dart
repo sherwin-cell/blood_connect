@@ -11,7 +11,7 @@ import 'screens/face_verification_instructions_screen.dart';
 
 /// Account identity verification, always in this order:
 ///
-/// 1. Valid ID (front + back) uploaded to Cloudinary and saved to
+/// 1. Valid ID (front + back) uploaded privately (backend) and saved to
 ///    id_verifications/{uid}. Skipped when an ID is already on file.
 /// 2. Selfie, which the backend compares with the ID's front photo.
 ///

@@ -14,7 +14,8 @@ abstract class IVerificationRepository {
   /// Checks if users/{uid}.faceVerified is true (written only by the backend).
   Future<bool> getFaceVerificationStatus(String userId);
 
-  /// Uploads request ID images to Cloudinary. Does not write Firestore.
+  /// Uploads ID images privately through the backend and returns their
+  /// secure:// references. Does not write Firestore.
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
     required String frontIdPath,
     String? backIdPath,

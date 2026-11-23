@@ -429,6 +429,47 @@ async function main() {
       false
     );
 
+    console.log("\n--- BLOOD REQUEST FORM UPLOADS ---\n");
+
+    const requestWithBrf = (brfFileUrl) => ({
+      userId: requesterId,
+      requesterId,
+      bloodType: "O+",
+      status: "pending",
+      brfFileUrl,
+    });
+    const ownBrf = `secure://raw/blood_connect_private/${requesterId}/brf/form1.pdf`;
+
+    await seed();
+    await test(
+      "Requester can submit a request with their private Blood Request Form",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), requestWithBrf(ownBrf)),
+      true
+    );
+
+    await seed();
+    await test(
+      "A public Cloudinary link is refused as the Blood Request Form",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"),
+        requestWithBrf("https://res.cloudinary.com/dlk8chosr/raw/upload/v1/form.pdf")),
+      false
+    );
+
+    await seed();
+    await test(
+      "Someone else's private Blood Request Form is refused",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"),
+        requestWithBrf(`secure://raw/blood_connect_private/${strangerId}/brf/form1.pdf`)),
+      false
+    );
+
+    await seed();
+    await test(
+      "Requester cannot replace the Blood Request Form after submitting",
+      () => updateDoc(doc(db(requesterId), "blood_requests", "open-req"), { brfFileUrl: ownBrf }),
+      false
+    );
+
     console.log("\n--- TEST SUMMARY ---");
     console.log(`Passed: ${passed}`);
     console.log(`Failed: ${failed}`);

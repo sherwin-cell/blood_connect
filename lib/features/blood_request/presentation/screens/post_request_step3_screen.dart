@@ -1,12 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
+import '../../../../core/services/secure_upload_api.dart';
 import '../../../../core/theme/app_theme.dart';
 import './post_request_step4_screen.dart';
 import '../widgets/step_indicator.dart';
@@ -61,6 +59,8 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
 
   String? _brfFileName;
   String? _brfFileUrl;
+
+  final SecureUploadApi _uploads = SecureUploadApi();
 
   bool _isUploadingPdf = false;
 
@@ -151,125 +151,28 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
         });
       }
 
-      final Uint8List fileBytes = await file.readAsBytes();
-
-      debugPrint('========================================');
-      debugPrint('BRF PDF: File successfully read');
-      debugPrint('BRF PDF: File name = $fileName');
-      debugPrint('BRF PDF: File size = ${fileBytes.length} bytes');
-      debugPrint('========================================');
-
-      if (fileBytes.isEmpty) {
-        throw Exception('The selected PDF file is empty.');
-      }
-
-      // ==========================================================
-      // CLOUDINARY
-      // ==========================================================
-
-      const String cloudName = 'dlk8chosr';
-      const String uploadPreset = 'blood_request_preset';
-
-      final Uri uri = Uri.parse(
-        'https://api.cloudinary.com/v1_1/$cloudName/raw/upload',
+      // Private upload through the backend: the result is a secure://
+      // reference (only the requester and PRC can view the form), not a
+      // public link. It is saved in brfFileUrl.
+      final ref = await _uploads.upload(
+        file,
+        SecureUploadKind.bloodRequestForm,
       );
 
-      debugPrint('========================================');
-      debugPrint('BRF PDF: Starting Cloudinary upload');
-      debugPrint('Cloud name: $cloudName');
-      debugPrint('Upload preset: $uploadPreset');
-      debugPrint('Upload endpoint: $uri');
-      debugPrint('File name: $fileName');
-      debugPrint('File bytes: ${fileBytes.length}');
-      debugPrint('========================================');
+      if (!mounted) return;
 
-      final http.MultipartRequest request = http.MultipartRequest('POST', uri);
+      setState(() {
+        _brfFileName = fileName;
+        _brfFileUrl = ref;
+        _isUploadingPdf = false;
+      });
 
-      request.fields['upload_preset'] = uploadPreset;
-
-      request.files.add(
-        http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('BRF PDF uploaded securely.'),
+          backgroundColor: Colors.green,
+        ),
       );
-
-      debugPrint('BRF PDF: Sending request to Cloudinary...');
-
-      final http.StreamedResponse response = await request.send();
-
-      final String responseData = await response.stream.bytesToString();
-
-      debugPrint('========================================');
-      debugPrint('BRF PDF: Cloudinary response');
-      debugPrint('Status code: ${response.statusCode}');
-      debugPrint('Response: $responseData');
-      debugPrint('========================================');
-
-      Map<String, dynamic> jsonResult;
-
-      try {
-        final dynamic decoded = json.decode(responseData);
-
-        if (decoded is! Map<String, dynamic>) {
-          throw Exception('Unexpected Cloudinary response format.');
-        }
-
-        jsonResult = decoded;
-      } catch (e) {
-        throw Exception(
-          'Cloudinary returned an invalid response: $responseData',
-        );
-      }
-
-      // ==========================================================
-      // SUCCESS
-      // ==========================================================
-
-      if (response.statusCode == 200) {
-        final String? secureUrl = jsonResult['secure_url']?.toString();
-
-        debugPrint('BRF PDF: Upload successful.');
-        debugPrint('BRF PDF: secure_url = $secureUrl');
-
-        if (secureUrl == null || secureUrl.isEmpty) {
-          throw Exception(
-            'Cloudinary upload succeeded but no secure_url '
-            'was returned.',
-          );
-        }
-
-        if (!mounted) return;
-
-        setState(() {
-          _brfFileName = fileName;
-          _brfFileUrl = secureUrl;
-          _isUploadingPdf = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('BRF PDF uploaded successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        return;
-      }
-
-      // ==========================================================
-      // CLOUDINARY ERROR
-      // ==========================================================
-
-      String errorMessage = 'Cloudinary upload failed.';
-
-      final dynamic error = jsonResult['error'];
-
-      if (error is Map && error['message'] != null) {
-        errorMessage = error['message'].toString();
-      }
-
-      debugPrint('BRF PDF: Cloudinary ERROR');
-      debugPrint('BRF PDF: $errorMessage');
-
-      throw Exception(errorMessage);
     } catch (e, stackTrace) {
       debugPrint('========================================');
       debugPrint('BRF PDF UPLOAD ERROR');
@@ -287,7 +190,7 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error uploading BRF PDF: $e'),
+          content: Text('Could not upload the BRF PDF: $e'),
           backgroundColor: Colors.red,
         ),
       );

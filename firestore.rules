@@ -35,6 +35,16 @@ service cloud.firestore {
     // Offer statuses the donor may still withdraw from.
     // Keep in sync with OfferStatus.active in the app.
     // Requests must name one specific ABO/Rh type ("Any Type" is retired).
+    // A private upload made through blood_connect_backend (POST /api/files):
+    // secure://<image|raw>/<folder>/<uid>/<kind>/<name>.<ext>, in the
+    // signed-in user's own folder. Public Cloudinary links are not accepted
+    // for ID photos or Blood Request Forms.
+    function isOwnSecureFile(value, kind, resourceType, extensions) {
+      return value is string
+        && value.matches('secure://' + resourceType + '/[A-Za-z0-9_-]+/'
+             + request.auth.uid + '/' + kind + '/[A-Za-z0-9_-]+[.](' + extensions + ')');
+    }
+
     function validBloodTypes() {
       return ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
     }
@@ -171,7 +181,11 @@ service cloud.firestore {
 
     match /users/{userId} {
 
-      allow read: if isAuthenticated();
+      // Profiles hold contact details, address and verification state:
+      // only the owner and PRC may read them. Other users see names only
+      // where they were copied on purpose (offers, match chat
+      // participantNames). The backend uses the Admin SDK.
+      allow read: if isOwner(userId) || isAdmin();
 
       // Users may create their own accounts,
       // but cannot assign administrator privileges
@@ -274,8 +288,8 @@ service cloud.firestore {
         && request.resource.data.get('status', '') == 'submitted'
         && request.resource.data.get('frontIdImageUrl', '') is string
         && request.resource.data.get('backIdImageUrl', '') is string
-        && request.resource.data.frontIdImageUrl.size() > 0
-        && request.resource.data.backIdImageUrl.size() > 0
+        && isOwnSecureFile(request.resource.data.frontIdImageUrl, 'id_front', 'image', 'jpg|png')
+        && isOwnSecureFile(request.resource.data.backIdImageUrl, 'id_back', 'image', 'jpg|png')
         && !request.resource.data.keys().hasAny([
           'reviewedAt',
           'reviewedBy',
@@ -357,6 +371,11 @@ service cloud.firestore {
         )
         && request.resource.data.get('status', 'pending') == 'pending'
         && request.resource.data.get('bloodType', '') in validBloodTypes()
+        // The Blood Request Form must be a private upload of the requester's.
+        && (
+          !('brfFileUrl' in request.resource.data)
+          || isOwnSecureFile(request.resource.data.brfFileUrl, 'brf', 'raw', 'pdf')
+        )
         && !request.resource.data.keys().hasAny([
           'fulfilledAt',
           'fulfilledBy',
@@ -406,6 +425,8 @@ service cloud.firestore {
             'reviewedAt',
             'cancelledAt',
             'cancelledBy',
+            // The submitted Blood Request Form stays as PRC received it.
+            'brfFileUrl',
             // Written by PRC (admin portal) or the backend only.
             'rejectionReason',
             'archived',

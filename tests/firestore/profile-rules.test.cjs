@@ -22,6 +22,10 @@ const {
   deleteDoc,
   deleteField,
   serverTimestamp,
+  collection,
+  getDocs,
+  query,
+  where,
 } = require("firebase/firestore");
 
 const PROJECT_ID = "blood-connect-12ac2";
@@ -226,6 +230,58 @@ async function main() {
     await test(
       "Admins can read account_deletions",
       () => getDoc(doc(db(adminId), "account_deletions", "gone-user")),
+      true
+    );
+
+    // ---------------------------------------------------------------
+    // Reading profiles: owner and PRC only
+    // ---------------------------------------------------------------
+    await seed();
+    await test(
+      "Owner can read their own profile",
+      () => getDoc(doc(db(userId), "users", userId)),
+      true
+    );
+
+    await seed();
+    await test(
+      "Owner can check for their own profile before it exists",
+      () => getDoc(doc(db("brand-new-user"), "users", "brand-new-user")),
+      true
+    );
+
+    await seed();
+    await test(
+      "Another user cannot read someone else's profile",
+      () => getDoc(doc(db(otherId), "users", userId)),
+      false
+    );
+
+    await seed();
+    await test(
+      "Signed-out visitors cannot read profiles",
+      () => getDoc(doc(testEnv.unauthenticatedContext().firestore(), "users", userId)),
+      false
+    );
+
+    await seed();
+    await test(
+      "Users cannot look up other profiles by email",
+      () => getDocs(query(collection(db(otherId), "users"), where("email", "==", "juan@example.com"))),
+      false
+    );
+
+    await seed();
+    await test(
+      "PRC admins can read any profile",
+      () => getDoc(doc(db(adminId), "users", userId)),
+      true
+    );
+
+    await seed();
+    await test(
+      "PRC admins can list profiles (admin portal Users page)",
+      () => getDocs(collection(db(adminId), "users")),
       true
     );
 

@@ -44,8 +44,9 @@ async function main() {
       status: 'submitted',
       validationStatus: 'not_checked',
       idType: 'Philippine National ID (PhilSys)',
-      frontIdImageUrl: 'https://example.com/test-front.jpg',
-      backIdImageUrl: 'https://example.com/test-back.jpg',
+      // Private uploads made through the backend (POST /api/files).
+      frontIdImageUrl: `secure://image/blood_connect_private/${userId}/id_front/front1.jpg`,
+      backIdImageUrl: `secure://image/blood_connect_private/${userId}/id_back/back1.png`,
     };
 
     console.log('TEST 1: Owner creates a one-time ID submission');
@@ -87,28 +88,50 @@ async function main() {
       submissionId: 'not-my-uid',
     }));
 
-    console.log('TEST 12: Owner cannot create approved submission');
-    await assertFails(otherDb.collection('id_verifications').doc(otherUserId).set({
+    // A valid submission for otherUserId, to vary one field at a time.
+    const otherSubmission = {
       ...submission,
       userId: otherUserId,
       submissionId: otherUserId,
-      status: 'approved',
-    }));
+      frontIdImageUrl: `secure://image/blood_connect_private/${otherUserId}/id_front/f.jpg`,
+      backIdImageUrl: `secure://image/blood_connect_private/${otherUserId}/id_back/b.jpg`,
+    };
+    const otherDoc = otherDb.collection('id_verifications').doc(otherUserId);
+
+    console.log('TEST 12: Owner cannot create approved submission');
+    await assertFails(otherDoc.set({ ...otherSubmission, status: 'approved' }));
 
     console.log('TEST 13: Owner cannot create submission missing back image');
-    const { backIdImageUrl, ...incomplete } = submission;
-    await assertFails(otherDb.collection('id_verifications').doc(otherUserId).set({
-      ...incomplete,
-      userId: otherUserId,
-      submissionId: otherUserId,
+    const { backIdImageUrl, ...incomplete } = otherSubmission;
+    await assertFails(otherDoc.set(incomplete));
+
+    console.log('TEST 13b: Public Cloudinary links are refused for ID photos');
+    await assertFails(otherDoc.set({
+      ...otherSubmission,
+      frontIdImageUrl: 'https://res.cloudinary.com/dlk8chosr/image/upload/v1/front.jpg',
     }));
+
+    console.log("TEST 13c: Another user's private ID photo is refused");
+    await assertFails(otherDoc.set({
+      ...otherSubmission,
+      frontIdImageUrl: submission.frontIdImageUrl,
+    }));
+
+    console.log('TEST 13d: The front photo must be an id_front upload');
+    await assertFails(otherDoc.set({
+      ...otherSubmission,
+      frontIdImageUrl: otherSubmission.backIdImageUrl,
+    }));
+
+    console.log('TEST 13e: A valid private submission is accepted');
+    await assertSucceeds(otherDoc.set(otherSubmission));
 
     console.log('TEST 14: Owner cannot change account approval status');
     await assertFails(userDb.collection('users').doc(userId).update({
       idVerificationStatus: 'approved',
     }));
 
-    console.log('\nALL 14 ONE-TIME ID SECURITY TESTS PASSED');
+    console.log('\nALL 18 ONE-TIME ID SECURITY TESTS PASSED');
   } finally {
     await testEnv.cleanup();
   }
