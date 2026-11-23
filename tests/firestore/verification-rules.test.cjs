@@ -72,11 +72,14 @@ async function main() {
     console.log('TEST 8: Owner cannot delete saved ID');
     await assertFails(doc.delete());
 
-    console.log('TEST 9: Admin cannot approve/overwrite saved ID');
-    await assertFails(adminDb.collection('id_verifications').doc(userId).update({ status: 'approved' }));
+    // PRC sets the submission's status when it approves or rejects the
+    // blood request it belongs to (admin portal, BloodRequestDetail); the
+    // backend notifies the user from that change.
+    console.log('TEST 9: Admin can approve or reject a submission');
+    await assertSucceeds(adminDb.collection('id_verifications').doc(userId).update({ status: 'approved' }));
 
-    console.log('TEST 10: Admin cannot delete saved ID');
-    await assertFails(adminDb.collection('id_verifications').doc(userId).delete());
+    console.log('TEST 10: Other user cannot change a submission');
+    await assertFails(otherDb.collection('id_verifications').doc(userId).update({ status: 'rejected' }));
 
     console.log('TEST 11: Owner cannot create ID under another UID');
     await assertFails(userDb.collection('id_verifications').doc('not-my-uid').set({
