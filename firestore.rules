@@ -107,8 +107,12 @@ service cloud.firestore {
         'availabilityReview',
         'isAvailableForDonation',
 
+        // PRC's archive of a rejected application (admin portal).
+        'archived',
         'archivedAt',
-        'archivedBy'
+        'archivedBy',
+        'restoredAt',
+        'restoredBy'
       ];
     }
 
@@ -155,6 +159,7 @@ service cloud.firestore {
           'donationAvailabilityStatus',
           'availabilityReview',
 
+          'archived',
           'archivedAt',
           'archivedBy'
         ]);
@@ -400,7 +405,17 @@ service cloud.firestore {
             'reviewedBy',
             'reviewedAt',
             'cancelledAt',
-            'cancelledBy'
+            'cancelledBy',
+            // Written by PRC (admin portal) or the backend only.
+            'rejectionReason',
+            'archived',
+            'archivedAt',
+            'archivedBy',
+            'restoredAt',
+            'restoredBy',
+            'matchedAt',
+            'reopenedAt',
+            'matchingDonorsNotified'
           ])
       );
 

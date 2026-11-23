@@ -392,6 +392,43 @@ async function main() {
       false
     );
 
+    console.log("\n--- ADMIN-ONLY FIELDS ---\n");
+
+    for (const field of ["archived", "rejectionReason", "matchingDonorsNotified"]) {
+      await seed();
+      await test(
+        `Requester cannot set ${field} on their own request`,
+        () => updateDoc(doc(db(requesterId), "blood_requests", "fulfilled-req"), {
+          [field]: field === "matchingDonorsNotified" ? 99 : field === "archived" ? false : "x",
+        }),
+        false
+      );
+    }
+
+    await seed();
+    await test(
+      "Requester can still edit ordinary fields on their request",
+      () => updateDoc(doc(db(requesterId), "blood_requests", "open-req"), { notes: "Ward 3" }),
+      true
+    );
+
+    await seed();
+    await test(
+      "PRC can archive a finished request and record a rejection reason",
+      () => updateDoc(doc(db(adminId), "blood_requests", "fulfilled-req"), {
+        archived: true,
+        rejectionReason: "x",
+      }),
+      true
+    );
+
+    await seed();
+    await test(
+      "Donor cannot clear PRC's archive flag on their application",
+      () => updateDoc(doc(db(donorId), "donors", donorId), { archived: false }),
+      false
+    );
+
     console.log("\n--- TEST SUMMARY ---");
     console.log(`Passed: ${passed}`);
     console.log(`Failed: ${failed}`);
