@@ -34,6 +34,11 @@ service cloud.firestore {
 
     // Offer statuses the donor may still withdraw from.
     // Keep in sync with OfferStatus.active in the app.
+    // Requests must name one specific ABO/Rh type ("Any Type" is retired).
+    function validBloodTypes() {
+      return ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+    }
+
     function withdrawableOfferStatuses() {
       return ['pending', 'approved', 'accepted'];
     }
@@ -301,6 +306,7 @@ service cloud.firestore {
           request.resource.data.get('requesterId', '') == request.auth.uid
         )
         && request.resource.data.get('status', 'pending') == 'pending'
+        && request.resource.data.get('bloodType', '') in validBloodTypes()
         && !request.resource.data.keys().hasAny([
           'fulfilledAt',
           'fulfilledBy',
@@ -335,6 +341,10 @@ service cloud.firestore {
         && request.resource.data.get(
           'requesterId', ''
         ) == resource.data.get('requesterId', '')
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['bloodType'])
+          || request.resource.data.get('bloodType', '') in validBloodTypes()
+        )
         && !request.resource.data
           .diff(resource.data)
           .affectedKeys()

@@ -178,6 +178,54 @@ async function main() {
       false
     );
 
+    const newRequest = (bloodType) => ({
+      userId: requesterId,
+      requesterId,
+      bloodType,
+      status: "pending",
+    });
+
+    await seed();
+    await test(
+      "Requester can create a request for a specific blood type",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), newRequest("AB-")),
+      true
+    );
+
+    for (const bloodType of ["Any Type", "Any", "", "o+"]) {
+      await seed();
+      await test(
+        `Requester cannot create a request with blood type ${JSON.stringify(bloodType)}`,
+        () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), newRequest(bloodType)),
+        false
+      );
+    }
+
+    await seed();
+    await test(
+      "Requester cannot create a request without a blood type",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), {
+        userId: requesterId,
+        requesterId,
+        status: "pending",
+      }),
+      false
+    );
+
+    await seed();
+    await test(
+      "Requester can change the blood type to another specific type",
+      () => updateDoc(doc(db(requesterId), "blood_requests", "open-req"), { bloodType: "A-" }),
+      true
+    );
+
+    await seed();
+    await test(
+      "Requester cannot change the blood type to Any Type",
+      () => updateDoc(doc(db(requesterId), "blood_requests", "open-req"), { bloodType: "Any Type" }),
+      false
+    );
+
     await seed();
     await test(
       "Requester cannot change other fields while cancelling",

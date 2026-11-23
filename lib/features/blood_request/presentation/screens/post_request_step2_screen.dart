@@ -31,8 +31,7 @@ class PostRequestStep2Screen extends StatefulWidget {
 
 class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
   final _formKey = GlobalKey<FormState>();
-  String? _selectedBloodType = 'A+';
-  bool _anyBloodType = false;
+  String? _selectedBloodType;
   String? _selectedUnits;
   String? _selectedComponent = 'Whole Blood';
   String _urgency = RequestUrgency.normal;
@@ -67,10 +66,10 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
   }
 
   void _nextStep() {
-    if (!_anyBloodType && _selectedBloodType == null) {
+    if (_selectedBloodType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select a blood type or check "Any Blood Type"'),
+          content: Text('Please select a blood type'),
           backgroundColor: Colors.red,
         ),
       );
@@ -106,7 +105,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
           contactNumber: widget.contactNumber,
           relativeName: widget.relativeName,
           relationship: widget.relationship,
-          bloodType: _anyBloodType ? 'Any Type' : _selectedBloodType!,
+          bloodType: _selectedBloodType!,
           unitsRequired: int.tryParse(_selectedUnits!.replaceAll('+', '')) ?? 1,
           component: _selectedComponent ?? 'Whole Blood',
           hemoglobin: _hemoglobinController.text.trim(),
@@ -225,8 +224,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                   children: [
                     // 1. Blood Type Needed
                     DropdownButtonFormField<String>(
-                      key: ValueKey('bloodType-$_anyBloodType'),
-                      initialValue: _anyBloodType ? null : _selectedBloodType,
+                      initialValue: _selectedBloodType,
                       decoration: _inputDecoration(
                         'Blood Type Needed',
                         Icons.water_drop_outlined,
@@ -237,68 +235,8 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                             (t) => DropdownMenuItem(value: t, child: Text(t)),
                           )
                           .toList(),
-                      onChanged: _anyBloodType
-                          ? null
-                          : (val) => setState(() => _selectedBloodType = val),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Don't know the blood type banner / Checkbox
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Don\'t know the exact blood type?',
-                            style: TextStyle(
-                              color: AppColors.primaryRed,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Select "Any Blood Type" to broadcast to compatible profiles.',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: Checkbox(
-                                  value: _anyBloodType,
-                                  activeColor: AppColors.primaryRed,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _anyBloodType = val ?? false;
-                                      if (_anyBloodType) {
-                                        _selectedBloodType = null;
-                                      }
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Any Blood Type',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      onChanged: (val) =>
+                          setState(() => _selectedBloodType = val),
                     ),
                     const SizedBox(height: 16),
 
