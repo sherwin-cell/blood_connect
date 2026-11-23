@@ -394,13 +394,19 @@ async function main() {
 
     console.log("\n--- ADMIN-ONLY FIELDS ---\n");
 
-    for (const field of ["archived", "rejectionReason", "matchingDonorsNotified"]) {
+    const forged = {
+      archived: false,
+      rejectionReason: "x",
+      matchingDonorsNotified: 99,
+      prcStock: { reservedUnits: 2, pickupInstructions: "x" },
+      prcStockNotices: [{ reservedUnits: 2 }],
+      reviewChecklist: { brfMatches: true },
+    };
+    for (const [field, value] of Object.entries(forged)) {
       await seed();
       await test(
         `Requester cannot set ${field} on their own request`,
-        () => updateDoc(doc(db(requesterId), "blood_requests", "fulfilled-req"), {
-          [field]: field === "matchingDonorsNotified" ? 99 : field === "archived" ? false : "x",
-        }),
+        () => updateDoc(doc(db(requesterId), "blood_requests", "open-req"), { [field]: value }),
         false
       );
     }

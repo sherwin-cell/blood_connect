@@ -436,7 +436,12 @@ service cloud.firestore {
             'restoredBy',
             'matchedAt',
             'reopenedAt',
-            'matchingDonorsNotified'
+            'matchingDonorsNotified',
+            // PRC stock reserved for the request (blood_connect_backend
+            // prc_stock/) and PRC's review checklist (admin portal).
+            'prcStock',
+            'prcStockNotices',
+            'reviewChecklist'
           ])
       );
 
