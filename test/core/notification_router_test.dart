@@ -40,6 +40,23 @@ void main() {
       );
     });
 
+    test('expired request opens the Activity tab', () {
+      // The backend sends route `activity`; older records without a route
+      // fall back to Activity too. The request card there shows "Expired".
+      expect(
+        NotificationRouter.routeFor({
+          'route': 'activity',
+          'type': 'request_expired',
+          'requestId': 'req1',
+        }),
+        NotificationRoute.activity,
+      );
+      expect(
+        NotificationRouter.routeFor({'type': 'request_expired'}),
+        NotificationRoute.activity,
+      );
+    });
+
     test('blank route is ignored', () {
       expect(
         NotificationRouter.routeFor({'route': '  ', 'type': 'chat_message'}),
