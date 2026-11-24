@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BloodConnect — Save Lives in Sorsogon</title>
+  <meta name="description" content="BloodConnect is an Android app connecting blood donors and requesters in Sorsogon, with every user verified by the Philippine Red Cross.">
+  <meta name="theme-color" content="#B3261E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23B3261E' d='M12 2C12 2 5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13z'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --red: #B3261E;
+      --deep: #7A1815;
+      --rose: #F3D9D8;
+      --blush: #FDF2F2;
+      --ink: #1F1A1A;
+      --muted: #6B6363;
+      --line: rgba(0, 0, 0, 0.08);
+      --green: #2E7D32;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; border: 0; background: none; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---------- Header ---------- */
+    header {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav { display: flex; align-items: center; gap: 32px; height: 68px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-name { font-weight: 800; font-size: 20px; letter-spacing: -0.02em; }
+    .logo-name span { color: var(--red); }
+    .logo-tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--red); background: var(--blush); padding: 3px 8px; border-radius: 999px;
+    }
+    .nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 14px; font-weight: 500; color: var(--muted); }
+    .nav-links a:hover { color: var(--red); }
+
+    /* ---------- Google Play button ---------- */
+    .play {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #111; color: #fff; border-radius: 10px;
+      padding: 8px 16px 8px 12px; line-height: 1.1; text-align: left;
+      transition: transform .15s ease, background .15s ease;
+    }
+    .play:hover { background: #000; transform: translateY(-1px); }
+    .play:focus-visible, .btn:focus-visible, .copy:focus-visible { outline: 3px solid var(--rose); outline-offset: 2px; }
+    .play svg { width: 22px; height: 22px; flex: none; }
+    .play small { display: block; font-size: 9px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; opacity: .85; }
+    .play strong { display: block; font-size: 16px; font-weight: 600; letter-spacing: 0.01em; }
+    .play.sm { padding: 6px 12px 6px 10px; }
+    .play.sm strong { font-size: 13px; }
+    .play.sm svg { width: 18px; height: 18px; }
+
+    /* ---------- Hero ---------- */
+    .hero { position: relative; padding: 64px 0 96px; overflow: hidden; }
+    .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600; color: var(--red);
+      background: var(--blush); padding: 6px 12px; border-radius: 999px; margin-bottom: 20px;
+    }
+    h1 { font-size: clamp(40px, 5.4vw, 64px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 800; }
+    h1 span { color: var(--red); }
+    .lede { margin-top: 20px; font-size: 18px; color: var(--muted); max-width: 520px; }
+    .lede b { color: var(--ink); font-weight: 600; }
+
+    .ref {
+      margin-top: 28px; max-width: 520px;
+      display: flex; align-items: center; gap: 14px;
+      background: var(--blush); border: 1px dashed rgba(179, 38, 30, 0.45);
+      border-radius: 14px; padding: 14px 14px 14px 18px;
+    }
+    .ref[hidden] { display: none; }
+    .ref-icon {
+      width: 40px; height: 40px; border-radius: 50%; background: #fff; flex: none;
+      display: grid; place-items: center; color: var(--red);
+    }
+    .ref-text { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+    .ref-text strong { display: block; color: var(--ink); font-size: 14px; }
+    .ref-code {
+      font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+      font-weight: 700; color: var(--red); letter-spacing: 0.08em;
+    }
+    .copy {
+      flex: none; background: var(--red); color: #fff; font-size: 13px; font-weight: 600;
+      padding: 10px 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .copy:hover { background: var(--deep); }
+
+    .cta { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 52px; padding: 0 22px; border-radius: 12px;
+      font-weight: 600; font-size: 15px; color: var(--red);
+      border: 1.5px solid var(--red); background: #fff;
+      transition: background .15s ease;
+    }
+    .btn:hover { background: var(--blush); }
+    .cta .play { height: 52px; padding: 0 20px 0 14px; }
+    .notice {
+      margin-top: 14px; display: flex; gap: 8px; align-items: flex-start;
+      font-size: 13px; color: var(--muted); max-width: 520px;
+    }
+    .notice svg { flex: none; margin-top: 2px; color: var(--red); }
+    .notice.flash { animation: flash 1.2s ease; }
+    @keyframes flash { 0%, 100% { color: var(--muted); } 30% { color: var(--red); } }
+
+    .trust { margin-top: 36px; display: flex; gap: 28px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+    .trust div { display: flex; align-items: center; gap: 8px; }
+    .trust svg { color: var(--green); }
+
+    /* Right column: wave + phones */
+    .stage { position: relative; height: 600px; }
+    .wave { position: absolute; inset: -80px -240px -120px -60px; z-index: 0; }
+    .wave svg { width: 100%; height: 100%; }
+    .phone {
+      position: absolute; width: 260px; height: 540px;
+      background: #111; border-radius: 40px; padding: 10px;
+      box-shadow: 0 40px 80px -20px rgba(122, 24, 21, 0.45), 0 0 0 1px rgba(0,0,0,.2);
+      z-index: 2;
+    }
+    .phone.back { left: 4%; top: 50px; transform: rotate(-7deg); z-index: 1; }
+    .phone.front { right: 4%; top: 0; transform: rotate(4deg); }
+    .screen {
+      position: relative; width: 100%; height: 100%;
+      border-radius: 31px; overflow: hidden; background: #F9F9F9;
+      font-size: 10px; display: flex; flex-direction: column;
+    }
+    .punch { position: absolute; top: 9px; left: 50%; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #111; z-index: 3; }
+    .status { display: flex; justify-content: space-between; padding: 8px 18px 4px; font-size: 9px; font-weight: 600; }
+    .appbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px 10px; background: #fff; font-weight: 700; font-size: 13px; }
+    .appbar.red { background: var(--red); color: #fff; }
+    .s-body { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+    .s-body > * { flex-shrink: 0; }
+    .chips { display: flex; gap: 6px; }
+    .chip { padding: 4px 9px; border-radius: 999px; background: #fff; border: 1px solid var(--line); font-weight: 600; font-size: 9px; color: var(--muted); }
+    .chip.on { background: var(--red); color: #fff; border-color: var(--red); }
+    .req { background: #fff; border-radius: 12px; padding: 10px; border: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+    .bt { width: 36px; height: 36px; flex: none; border-radius: 10px; background: var(--blush); color: var(--red); display: grid; place-items: center; font-weight: 800; font-size: 12px; }
+    .req-main { flex: 1; min-width: 0; }
+    .req-main b { display: block; font-size: 10.5px; }
+    .req-main span { color: var(--muted); font-size: 9px; }
+    .tag { font-size: 8px; font-weight: 700; padding: 3px 7px; border-radius: 999px; }
+    .tag.urgent { background: #FDE2E1; color: var(--red); }
+    .tag.ok { background: #E3F2E5; color: var(--green); }
+    .navbar { display: flex; justify-content: space-around; padding: 8px 0 14px; background: #fff; border-top: 1px solid var(--line); color: #9b9393; font-size: 8px; }
+    .navbar div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .navbar .on { color: var(--red); font-weight: 700; }
+    .member {
+      background: linear-gradient(135deg, var(--red), var(--deep)); color: #fff;
+      border-radius: 14px; padding: 12px; position: relative; overflow: hidden;
+    }
+    .member::after { content: ''; position: absolute; right: -20px; top: -20px; width: 90px; height: 90px; border-radius: 50%; background: rgba(255,255,255,.1); }
+    .member small { opacity: .8; font-size: 8.5px; }
+    .member b { display: block; font-size: 13px; margin: 2px 0 8px; }
+    .member .row { display: flex; gap: 14px; font-size: 8.5px; }
+    .member .row span { display: block; font-weight: 700; font-size: 11px; }
+    .s-title { font-weight: 700; font-size: 11px; margin-top: 4px; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tile { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+    .tile i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 6px; font-style: normal; }
+    .tile b { display: block; font-size: 10px; }
+    .tile span { color: var(--muted); font-size: 8.5px; }
+    .tile .go { margin-top: 8px; border-radius: 6px; padding: 5px; text-align: center; font-weight: 700; font-size: 8.5px; }
+    .info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .info div { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 2px; text-align: center; font-size: 7.5px; font-weight: 500; }
+    .info svg { display: block; margin: 0 auto 4px; color: var(--red); }
+
+    /* ---------- Sections ---------- */
+    section.block { padding: 96px 0; }
+    section.block.tint { background: var(--blush); }
+    .kicker { font-size: 13px; font-weight: 700; color: var(--red); letter-spacing: .1em; text-transform: uppercase; }
+    h2 { font-size: clamp(28px, 3.4vw, 40px); letter-spacing: -0.03em; line-height: 1.15; margin-top: 10px; max-width: 640px; }
+    .sub { margin-top: 12px; color: var(--muted); font-size: 16px; max-width: 600px; }
+    .cards { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+    .card .ic { width: 48px; height: 48px; border-radius: 14px; background: var(--blush); color: var(--red); display: grid; place-items: center; margin-bottom: 18px; }
+    .card h3 { font-size: 18px; letter-spacing: -0.01em; }
+    .card p { margin-top: 8px; color: var(--muted); font-size: 14.5px; }
+    .steps { margin-top: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; counter-reset: step; }
+    .step { position: relative; background: #fff; border-radius: 18px; padding: 28px 24px; }
+    .step::before {
+      counter-increment: step; content: counter(step);
+      width: 36px; height: 36px; border-radius: 50%; background: var(--red); color: #fff;
+      display: grid; place-items: center; font-weight: 700; margin-bottom: 16px;
+    }
+    .step h3 { font-size: 16px; }
+    .step p { margin-top: 6px; color: var(--muted); font-size: 14px; }
+
+    footer { padding: 36px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px);
+      background: #323232; color: #fff; padding: 12px 18px; border-radius: 10px;
+      font-size: 14px; opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 50;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 960px) {
+      .hero-grid { grid-template-columns: 1fr; }
+      .stage { height: 560px; max-width: 520px; margin: 0 auto; width: 100%; }
+      .wave { inset: -40px -120px -80px -120px; }
+      .cards { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .nav { justify-content: space-between; }
+      .logo-tag { display: none; }
+      .hero { padding: 40px 0 64px; }
+      .stage { height: 480px; }
+      .phone { width: 210px; height: 440px; border-radius: 34px; padding: 8px; }
+      .screen { border-radius: 27px; font-size: 9px; }
+      .phone.back { left: 0; top: 40px; }
+      .phone.front { right: 0; }
+      .steps { grid-template-columns: 1fr; }
+      .ref { flex-wrap: wrap; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="drop" viewBox="0 0 24 24"><path d="M12 2.2c-.3 0-.6.2-.8.4C9.6 4.7 5 10.7 5 15a7 7 0 0 0 14 0c0-4.3-4.6-10.3-6.2-12.4a1 1 0 0 0-.8-.4z"/></symbol>
+  <symbol id="gplay" viewBox="0 0 24 24">
+    <path fill="#00D7FE" d="M3.6 1.8 13.5 12l-9.9 10.2c-.4-.2-.6-.7-.6-1.2V3c0-.5.2-1 .6-1.2z"/>
+    <path fill="#00F076" d="M16.8 8.7 13.5 12 3.6 1.8c.3-.2.8-.2 1.2 0l12 6.9z"/>
+    <path fill="#FF3A44" d="M16.8 15.3 4.8 22.2c-.4.2-.9.2-1.2 0L13.5 12l3.3 3.3z"/>
+    <path fill="#FFD400" d="m20.4 12-3.6 3.3L13.5 12l3.3-3.3 2.9 1.7c1 .6 1 1.5.7 1.6z"/>
+  </symbol>
+</svg>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="/" aria-label="BloodConnect home">
+      <svg width="30" height="30" fill="#B3261E" aria-hidden="true"><use href="#drop"/></svg>
+      <span class="logo-name">Blood<span>Connect</span></span>
+      <span class="logo-tag">Sorsogon</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+    </nav>
+    <a class="play sm js-play" href="#" role="button">
+      <svg aria-hidden="true"><use href="#gplay"/></svg>
+      <span><small>Get it on</small><strong>Google Play</strong></span>
+    </a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">
+          <svg width="14" height="14" fill="currentColor" aria-hidden="true"><use href="#drop"/></svg>
+          Android app for Sorsogon
+        </span>
+        <h1>Save Lives with <span>BloodConnect</span></h1>
+        <p class="lede">
+          <b>BloodConnect</b> is a mobile app for Android that connects blood donors and
+          people in need of blood across Sorsogon. Every donor and requester is
+          <b>verified by the Philippine Red Cross</b>, so help reaches the right people fast.
+        </p>
+
+        <div class="ref" id="ref" hidden>
+          <div class="ref-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+          </div>
+          <div class="ref-text">
+            <strong>You've been invited to BloodConnect!</strong>
+            Referral code: <span class="ref-code" id="ref-code"></span>
+          </div>
+          <button class="copy" id="copy-code" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy Code
+          </button>
+        </div>
+
+        <div class="cta">
+          <a class="play js-play" href="#" role="button" aria-describedby="play-notice">
+            <svg aria-hidden="true"><use href="#gplay"/></svg>
+            <span><small>Get it on</small><strong>GOOGLE PLAY</strong></span>
+          </a>
+          <a class="btn" href="#how-it-works">
+            How It Works
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+          </a>
+        </div>
+        <p class="notice" id="play-notice">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span>Google Play listing coming soon — test build via Blood-Connect Sorsogon.</span>
+        </p>
+
+        <div class="trust">
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>PRC-verified users</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Instant request alerts</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Built for Sorsogon</div>
+        </div>
+      </div>
+
+      <div class="stage" aria-hidden="true">
+        <div class="wave">
+          <svg viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#C7362D"/>
+                <stop offset="1" stop-color="#7A1815"/>
+              </linearGradient>
+            </defs>
+            <path fill="#FDF2F2" d="M160 40C330-30 560 20 720 120s120 360 40 520-300 200-470 150S20 640 30 470 0 110 160 40z"/>
+            <path fill="#F3D9D8" d="M230 120c150-60 340-20 450 80s90 300 20 420-260 150-390 110S100 560 110 420s-20-240 120-300z"/>
+            <path fill="url(#g1)" d="M300 210c120-40 260 0 330 80s60 230 0 320-200 110-300 80-160-120-160-230 10-210 130-250z"/>
+          </svg>
+        </div>
+
+        <!-- Back phone: home / onboarding -->
+        <div class="phone back">
+          <div class="screen">
+            <div class="punch"></div>
+            <div class="status"><span>9:41</span><span>▴ ◼</span></div>
+            <div class="appbar red">
+              <svg width="14" height="14" fill="#fff"><use href="#drop"/></svg>
+              BloodConnect
+            </div>
+            <div class="s-body">
+              <div class="member">
+                <small>PRC Verified Member</small>
+                <b>Juan Dela Cruz</b>
+                <div class="row">
+                  <div>Blood Type<span>O+</span></div>
+                  <div>Donations<span>3</span></div>
+                  <div>Status<span>Eligible</span></div>
+                </div>
+              </div>
+              <div class="s-title">Quick Access</div>
+              <div class="tiles">
+                <div class="tile">
+                  <i style="background:#FDE2E1;color:#B3261E">
+                    <svg width="13" height="13" fill="currentColor"><use href="#drop"/></svg>
+                  </i>
+                  <b>Need Blood?</b>
+                  <span>Apply for a blood request.</span>
+                  <div class="go" style="background:#FDF2F2;color:#B3261E">Apply for Request</div>
+                </div>
+                <div class="tile">
+                  <i style="background:#FFF3E0;color:#EF6C00">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                  </i>
+                  <b>Want to donate?</b>
+                  <span>Become a donor.</span>
+                  <div class="go" style="background:#E3F2E5;color:#2E7D32">Apply as Donor</div>
+                </div>
+              </div>
+              <div class="s-title">Information &amp; Services</div>
+              <div class="info">
+                <div><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat PRC</div>
+                <div><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M16 3a4 4 0 0 1 0 8"/></svg>Refer</div>
+                <div><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 4h7a3 3 0 0 1 3 3v14a2 2 0 0 0-2-2H2zM22 4h-7a3 3 0 0 0-3 3v14a2 2 0 0 1 2-2h8z"/></svg>Guides</div>
+                <div><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 11l18-8v18L3 13z"/></svg>News</div>
+              </div>
+            </div>
+            <div class="navbar">
+              <div class="on">● <span>Home</span></div>
+              <div>○ <span>Requests</span></div>
+              <div>○ <span>History</span></div>
+              <div>○ <span>Profile</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Front phone: blood requests -->
+        <div class="phone front">
+          <div class="screen">
+            <div class="punch"></div>
+            <div class="status"><span>9:41</span><span>▴ ◼</span></div>
+            <div class="appbar">
+              <span style="color:#6B6363">←</span> Blood Requests
+            </div>
+            <div class="s-body">
+              <div class="chips">
+                <span class="chip on">All</span>
+                <span class="chip">Urgent</span>
+                <span class="chip">Matches me</span>
+              </div>
+              <div class="req">
+                <div class="bt">O+</div>
+                <div class="req-main"><b>2 bags · Whole blood</b><span>Sorsogon Provincial Hospital</span></div>
+                <span class="tag urgent">Urgent</span>
+              </div>
+              <div class="req">
+                <div class="bt">A+</div>
+                <div class="req-main"><b>1 bag · Packed RBC</b><span>Gubat District Hospital</span></div>
+                <span class="tag urgent">Urgent</span>
+              </div>
+              <div class="req">
+                <div class="bt">B−</div>
+                <div class="req-main"><b>1 bag · Platelets</b><span>Irosin District Hospital</span></div>
+                <span class="tag ok">Approved</span>
+              </div>
+              <div class="req">
+                <div class="bt">AB+</div>
+                <div class="req-main"><b>3 bags · Whole blood</b><span>Bulan Medicare Hospital</span></div>
+                <span class="tag ok">Approved</span>
+              </div>
+              <div class="req">
+                <div class="bt">O−</div>
+                <div class="req-main"><b>1 bag · Packed RBC</b><span>Sorsogon City</span></div>
+                <span class="tag ok">Approved</span>
+              </div>
+            </div>
+            <div class="navbar">
+              <div>○ <span>Home</span></div>
+              <div class="on">● <span>Requests</span></div>
+              <div>○ <span>History</span></div>
+              <div>○ <span>Profile</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block tint" id="features">
+    <div class="wrap">
+      <p class="kicker">Features</p>
+      <h2>Everything a blood emergency needs, in one app</h2>
+      <p class="sub">From finding a matching donor to confirming with the Philippine Red Cross, BloodConnect keeps every step in your pocket.</p>
+      <div class="cards">
+        <div class="card">
+          <div class="ic"><svg width="24" height="24" fill="currentColor" aria-hidden="true"><use href="#drop"/></svg></div>
+          <h3>Request blood fast</h3>
+          <p>Post a request with the blood type and hospital. Matching donors nearby are alerted right away.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg></div>
+          <h3>Donate when it counts</h3>
+          <p>See open requests that match your blood type and offer to donate once you're eligible.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Verified by PRC</h3>
+          <p>Every account is checked by the Philippine Red Cross before anyone can donate or request blood.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="how-it-works">
+    <div class="wrap">
+      <p class="kicker">How It Works</p>
+      <h2>Join the community in four steps</h2>
+      <div class="steps">
+        <div class="step" style="background:var(--blush)"><h3>Download the app</h3><p>Install BloodConnect on your Android phone.</p></div>
+        <div class="step" style="background:var(--blush)"><h3>Register</h3><p>Sign up as a blood donor, a requester, or both.</p></div>
+        <div class="step" style="background:var(--blush)"><h3>Get PRC-verified</h3><p>Complete ID and identity verification with the Philippine Red Cross.</p></div>
+        <div class="step" style="background:var(--blush)"><h3>Save lives</h3><p>Request blood or respond to requests that match your type.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="year"></span> BloodConnect · Sorsogon, Philippines</span>
+    <span>In partnership with Philippine Red Cross verification</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  // Set to the Play Store listing URL once the app is published.
+  const PLAY_STORE_URL = '';
+
+  const toast = document.getElementById('toast');
+  let toastTimer;
+  function showToast(text) {
+    toast.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      ta.remove();
+      return ok;
+    }
+  }
+
+  // Referral banner: shown for ?ref=<CODE>; only letters, digits, - and _.
+  const rawRef = new URLSearchParams(location.search).get('ref') || '';
+  const refCode = rawRef.trim().toUpperCase();
+  if (/^[A-Z0-9_-]{1,32}$/.test(refCode)) {
+    document.getElementById('ref-code').textContent = refCode;
+    document.getElementById('ref').hidden = false;
+    document.getElementById('copy-code').addEventListener('click', async () => {
+      showToast(await copyText(refCode) ? 'Referral code copied!' : 'Could not copy the code');
+    });
+  }
+
+  // Google Play buttons: open the listing when live, else point at the notice.
+  const notice = document.getElementById('play-notice');
+  document.querySelectorAll('.js-play').forEach((el) => {
+    if (PLAY_STORE_URL) {
+      el.href = PLAY_STORE_URL;
+      el.removeAttribute('role');
+      el.target = '_blank';
+      el.rel = 'noopener';
+      return;
+    }
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      showToast('Google Play listing coming soon');
+      notice.classList.remove('flash');
+      void notice.offsetWidth;
+      notice.classList.add('flash');
+    });
+  });
+  if (PLAY_STORE_URL) notice.hidden = true;
+
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
