@@ -52,3 +52,6 @@ node_modules/
 *.log
 temp_*.txt
 analysis.txt
+
+# Firebase CLI hosting deploy cache
+.firebase/
