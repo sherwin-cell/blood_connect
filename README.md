@@ -37,6 +37,26 @@ first, then selfie.
   Android app in Firebase (Google Sign-In), and the SHA-256 values to
   `assetlinks.json` on blood-connect-12ac2.web.app (verified app links).
 
+### Verified app links (`hosting/.well-known/assetlinks.json`)
+
+> **TODO before Google Play rollout:** `assetlinks.json` currently lists
+> only the **debug** key's SHA-256 (`78:1A:3B:…:6F:BE`, from
+> `~/.android/debug.keystore` on the dev PC), so invite links open the app
+> only on locally built debug installs. Add the **upload key** and **Google
+> Play App Signing key** SHA-256 values to `sha256_cert_fingerprints` (Play
+> Console → Test and release → App integrity → App signing), then
+> `firebase deploy --only hosting`. JSON has no comments, so this note lives
+> here.
+
+```bash
+# SHA-256 of a keystore (use Android Studio's JBR keytool on Windows)
+keytool -list -v -keystore <keystore.jks> -alias <alias>
+```
+
+Debug keystores differ per PC; a teammate testing app links from their
+own machine needs their debug SHA-256 added too. Check verification on a
+device with `adb shell pm get-app-links com.bloodconnect.sorsogon`.
+
 ```bash
 flutter build appbundle --release --dart-define=API_BASE_URL=https://<backend host>
 # -> build/app/outputs/bundle/release/app-release.aab
