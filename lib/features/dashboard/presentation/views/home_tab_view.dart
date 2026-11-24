@@ -14,7 +14,7 @@ import '../../../donor/presentation/screens/matched_donors_screen.dart';
 import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
 import '../../../announcements/presentation/screens/announcements_screen.dart';
 import '../../../help/presentation/help_guides_screen.dart';
-import '../../../requests/presentation/urgent_requests_screen.dart';
+import '../../../referral/presentation/refer_friend_screen.dart';
 import '../../../verification/presentation/id_verification_flow.dart';
 import '../../../verification/presentation/identity_verification_flow.dart';
 import '../widgets/member_card.dart';
@@ -898,10 +898,10 @@ class HomeTabView extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         _buildInfoServiceItem(
-          Icons.priority_high_rounded,
-          'Urgent Requests',
+          Icons.groups_outlined,
+          'Refer a Friend',
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const UrgentRequestsScreen()),
+            MaterialPageRoute(builder: (_) => const ReferFriendScreen()),
           ),
         ),
         const SizedBox(width: 8),
