@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:blood_connect/features/auth/data/auth_service.dart';
+import 'package:blood_connect/features/blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
 import 'package:blood_connect/features/verification/domain/entities/request_id_verification_data.dart';
 import 'package:blood_connect/features/verification/presentation/screens/identity_verification_info_screen.dart';
 
@@ -61,4 +62,23 @@ void main() {
       expect(find.text('Continue'), findsOneWidget);
     },
   );
+
+  testWidgets('Post blood request welcome screen shows steps and checklist', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const MaterialApp(home: PostBloodRequestWelcomeScreen()),
+    );
+
+    expect(find.text('Emergency Blood Request'), findsOneWidget);
+    expect(find.text('Request Blood in an Emergency'), findsOneWidget);
+    expect(find.text('Patient Information'), findsOneWidget);
+    expect(find.text('Review & Submit'), findsOneWidget);
+    expect(find.text('Blood Request Form (BRF) as a PDF'), findsOneWidget);
+    expect(find.byTooltip('Help'), findsOneWidget);
+    expect(find.text('Get Started'), findsOneWidget);
+  });
 }
