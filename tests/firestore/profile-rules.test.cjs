@@ -159,6 +159,118 @@ async function main() {
     );
 
     // ---------------------------------------------------------------
+    // Date of Birth: set once, then read-only for the owner
+    // ---------------------------------------------------------------
+    async function seedBirthday(value) {
+      await seed();
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), "users", userId), {
+          birthday: value,
+        });
+      });
+    }
+
+    await seed();
+    await test(
+      "Owner can set birthday once when it is missing",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: "1999-08-21",
+          updatedAt: serverTimestamp(),
+        }),
+      true
+    );
+
+    await seedBirthday("");
+    await test(
+      "Owner can set birthday once when it is an empty string",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: "1999-08-21",
+        }),
+      true
+    );
+
+    await seedBirthday(null);
+    await test(
+      "Owner can set birthday once when it is null",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: "1999-08-21",
+        }),
+      true
+    );
+
+    await seed();
+    await test(
+      "Owner cannot set birthday in a non YYYY-MM-DD format",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: "08/21/1999",
+        }),
+      false
+    );
+
+    await seedBirthday("1999-08-21");
+    await test(
+      "Owner cannot change birthday once it is set",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: "2001-01-01",
+        }),
+      false
+    );
+
+    await seedBirthday("1999-08-21");
+    await test(
+      "Owner cannot remove birthday once it is set",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: deleteField(),
+        }),
+      false
+    );
+
+    await seedBirthday("1999-08-21");
+    await test(
+      "Owner cannot blank birthday once it is set",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), { birthday: "" }),
+      false
+    );
+
+    await seedBirthday("1999-08-21");
+    await test(
+      "Owner can still edit other fields when birthday is set",
+      () => {
+        const { birthday, ...withoutBirthday } = editProfile;
+        return updateDoc(doc(db(userId), "users", userId), withoutBirthday);
+      },
+      true
+    );
+
+    await seedBirthday("1999-08-21");
+    await test(
+      "Re-sending the same birthday is allowed (no change)",
+      () =>
+        updateDoc(doc(db(userId), "users", userId), {
+          birthday: "1999-08-21",
+          fullName: "Same Birthday",
+        }),
+      true
+    );
+
+    await seedBirthday("1999-08-21");
+    await test(
+      "PRC Admin can correct a set birthday",
+      () =>
+        updateDoc(doc(db(adminId), "users", userId), {
+          birthday: "1998-08-21",
+        }),
+      true
+    );
+
+    // ---------------------------------------------------------------
     // Notification Settings
     // ---------------------------------------------------------------
     await seed();

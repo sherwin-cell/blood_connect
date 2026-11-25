@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../domain/birthday.dart';
+
 class ProfileService {
   final FirebaseFirestore _firestore;
 
@@ -23,6 +25,28 @@ class ProfileService {
     } catch (_) {
       return false;
     }
+  }
+
+  /// The Date of Birth saved on `users/{uid}` (entered at Sign Up), or
+  /// null for accounts that never entered one (Google / legacy).
+  Future<DateTime?> fetchBirthday(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    return Birthday.fromUserData(doc.data());
+  }
+
+  /// Saves [birthDate] to `users/{uid}.birthday` only if none is stored
+  /// yet (legacy accounts), so a birthday is entered once and never
+  /// overwritten from the application forms.
+  Future<void> saveBirthdayIfMissing(String uid, DateTime birthDate) async {
+    final ref = _firestore.collection('users').doc(uid);
+    await _firestore.runTransaction((transaction) async {
+      final snap = await transaction.get(ref);
+      if (Birthday.fromUserData(snap.data()) != null) return;
+      transaction.set(ref, {
+        'birthday': Birthday.format(birthDate),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
   }
 
   /// Updates existing users/{uid} document with completed profile fields.

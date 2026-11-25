@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/firestore_service.dart';
+import '../../profile/domain/birthday.dart';
 import '../data/auth_service.dart';
 import 'login_screen.dart';
 
@@ -32,6 +33,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _birthdayController = TextEditingController();
+
+  // Date of Birth: entered once here, read-only everywhere else.
+  DateTime? _birthDate;
 
   // Step 1 Options
   String? _selectedSuffix;
@@ -95,7 +100,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _birthdayController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectBirthday() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(now.year - 18, now.month, now.day),
+      firstDate: Birthday.firstDate,
+      lastDate: now,
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+      helpText: 'SELECT DATE OF BIRTH',
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primaryRed,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+            onSurface: Colors.black,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      _birthDate = DateTime(picked.year, picked.month, picked.day);
+      _birthdayController.text = Birthday.format(_birthDate!);
+    });
   }
 
   void _nextStep() {
@@ -123,6 +157,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _onRegisterPressed() async {
     if (_isSubmitting || _isGoogleLoading) return;
+
+    final birthDate = _birthDate;
+    final birthdayError = Birthday.validate(birthDate);
+    if (birthdayError != null) {
+      _showSnackBar(birthdayError);
+      setState(() => _currentStep = 0);
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -171,6 +213,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         uid: user.uid,
         fullname: fullName,
         email: email,
+        birthday: Birthday.format(birthDate!),
       );
 
       await _authService.sendEmailVerification();
@@ -432,6 +475,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 10),
 
           TextFormField(
+            key: const ValueKey('register-birthday'),
+            controller: _birthdayController,
+            readOnly: true,
+            showCursor: false,
+            onTap: _selectBirthday,
+            style: const TextStyle(fontSize: 13, color: Colors.black87),
+            decoration: _inputDecoration('DATE OF BIRTH').copyWith(
+              hintText: 'YYYY-MM-DD',
+              helperText: 'You enter this once. It cannot be changed later.',
+              helperStyle: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              suffixIcon: const Icon(
+                Icons.calendar_today_rounded,
+                size: 18,
+                color: AppColors.primaryRed,
+              ),
+            ),
+            validator: (_) => Birthday.validate(_birthDate),
+          ),
+
+          const SizedBox(height: 10),
+
+          TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
@@ -669,6 +734,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSummaryRow('FULL NAME', fullName),
+              const Divider(height: 20),
+              _buildSummaryRow(
+                'DATE OF BIRTH',
+                _birthDate == null
+                    ? ''
+                    : '${Birthday.format(_birthDate!)} '
+                          '(${Birthday.age(_birthDate!)} years old)',
+              ),
               const Divider(height: 20),
               _buildSummaryRow('EMAIL ADDRESS', _emailController.text.trim()),
             ],

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../verification/data/services/cloudinary_service.dart';
+import '../domain/birthday.dart';
 import '../domain/notification_preferences.dart';
 import '../domain/user_profile_model.dart';
 
@@ -22,6 +23,10 @@ class PersonalInfoUpdate {
 
   final String fullName;
   final String phoneNumber;
+
+  /// Set only for the one-time entry on an older account with no saved
+  /// birthday. Null means `birthday` is left untouched (never cleared):
+  /// firestore.rules lets the owner set it once and never change it.
   final DateTime? birthDate;
   final String? gender;
   final String? nationality;
@@ -31,7 +36,8 @@ class PersonalInfoUpdate {
   final String? province;
 
   /// The only `users/{uid}` keys Edit Profile writes. None of them is in
-  /// the protected list of the owner update rule in firestore.rules.
+  /// the protected list of the owner update rule in firestore.rules;
+  /// `birthday` may only be set while it is empty.
   static const editableFields = {
     'fullName',
     'phoneNumber',
@@ -55,14 +61,7 @@ class PersonalInfoUpdate {
     };
     void put(String key, String? value) =>
         data[key] = clean(value) ?? FieldValue.delete();
-    put(
-      'birthday',
-      b == null
-          ? null
-          : '${b.year.toString().padLeft(4, '0')}-'
-                '${b.month.toString().padLeft(2, '0')}-'
-                '${b.day.toString().padLeft(2, '0')}',
-    );
+    if (b != null) data['birthday'] = Birthday.format(b);
     put('gender', gender);
     put('nationality', nationality);
     put('purok', purok);

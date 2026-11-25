@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../data/profile_repository.dart';
+import '../domain/birthday.dart';
 import '../domain/sorsogon_locations.dart';
 import '../domain/user_profile_model.dart';
 
@@ -66,7 +67,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     text: widget.profile.purok ?? '',
   );
 
-  late DateTime? _birthDate = widget.profile.birthDate;
+  /// Date of Birth saved on the profile. Once set it is read-only here;
+  /// only an older account without one may enter it, once.
+  late final DateTime? _savedBirthDate = Birthday.parse(
+    widget.profile.birthDate,
+  );
+  bool get _birthdayLocked => _savedBirthDate != null;
+  DateTime? _birthDate;
   late String? _gender = _blankToNull(widget.profile.gender);
   late String? _nationality = _blankToNull(widget.profile.nationality);
   late String? _municipality = _blankToNull(widget.profile.municipality);
@@ -128,17 +135,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickBirthDate() async {
+    if (_birthdayLocked) return;
     final today = widget.today ?? DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate:
           _birthDate ?? DateTime(today.year - 18, today.month, today.day),
-      firstDate: DateTime(1900),
+      firstDate: Birthday.firstDate,
       lastDate: today,
       initialEntryMode: DatePickerEntryMode.calendarOnly,
       helpText: 'SELECT DATE OF BIRTH',
     );
-    if (picked != null) setState(() => _birthDate = picked);
+    if (picked != null) setState(() => _birthDate = Birthday.parse(picked));
   }
 
   Future<void> _save() async {
@@ -154,7 +162,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         PersonalInfoUpdate(
           fullName: _nameController.text,
           phoneNumber: _phoneController.text.replaceAll(RegExp(r'[\s-]'), ''),
-          birthDate: _birthDate,
+          // Sent only for the one-time entry; a saved birthday is never
+          // re-sent.
+          birthDate: _birthdayLocked ? null : _birthDate,
           gender: _gender,
           nationality: _nationality,
           purok: _purokController.text,
@@ -307,24 +317,54 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               validator: validateFullName,
             ),
             _label('Date of Birth'),
-            InkWell(
-              onTap: _saving ? null : _pickBirthDate,
-              borderRadius: BorderRadius.circular(12),
-              child: InputDecorator(
-                decoration: _decoration(
-                  'Select date',
-                  icon: Icons.cake_outlined,
-                ).copyWith(suffixIcon: const Icon(Icons.calendar_today)),
+            if (_birthdayLocked)
+              InputDecorator(
+                key: const ValueKey('edit-profile-birthday-locked'),
+                decoration: _decoration('', icon: Icons.cake_outlined).copyWith(
+                  enabled: false,
+                  fillColor: const Color(0xFFF2F2F2),
+                  suffixIcon: const Icon(Icons.lock_outline),
+                  helperText:
+                      'Date of birth cannot be edited after registration. '
+                      'Contact PRC-Sorsogon for corrections.',
+                  helperMaxLines: 2,
+                ),
                 child: Text(
-                  _birthDate == null
-                      ? 'Select date'
-                      : DateFormat('MMMM d, yyyy').format(_birthDate!),
-                  style: TextStyle(
-                    color: _birthDate == null ? Colors.black45 : Colors.black87,
+                  '${DateFormat('MMMM d, yyyy').format(_savedBirthDate!)}'
+                  '  ·  ${Birthday.age(_savedBirthDate, now: widget.today)} '
+                  'years old',
+                  style: const TextStyle(color: Colors.black87),
+                ),
+              )
+            else
+              InkWell(
+                key: const ValueKey('edit-profile-birthday-input'),
+                onTap: _saving ? null : _pickBirthDate,
+                borderRadius: BorderRadius.circular(12),
+                child: InputDecorator(
+                  decoration:
+                      _decoration(
+                        'Select date',
+                        icon: Icons.cake_outlined,
+                      ).copyWith(
+                        suffixIcon: const Icon(Icons.calendar_today),
+                        helperText:
+                            'You can enter this once. It cannot be changed '
+                            'later.',
+                        helperMaxLines: 2,
+                      ),
+                  child: Text(
+                    _birthDate == null
+                        ? 'Select date'
+                        : DateFormat('MMMM d, yyyy').format(_birthDate!),
+                    style: TextStyle(
+                      color: _birthDate == null
+                          ? Colors.black45
+                          : Colors.black87,
+                    ),
                   ),
                 ),
               ),
-            ),
             _dropdown(
               label: 'Gender',
               hint: 'Select gender',

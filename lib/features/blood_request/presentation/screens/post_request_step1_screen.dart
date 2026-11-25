@@ -1,5 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../profile/data/profile_service.dart';
+import '../../../profile/domain/birthday.dart';
 import 'post_request_step2_screen.dart';
 import '../widgets/step_indicator.dart';
 import '../../../help/presentation/help_guides_screen.dart';
@@ -32,6 +35,58 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
     'Other',
   ];
 
+  /// Requester's own birthday from `users/{uid}` (entered at sign-up).
+  DateTime? _profileBirthDate;
+  DateTime? _pickedBirthDate;
+
+  bool get _isSelf => _selectedRelationship == 'Self';
+
+  /// The patient is the requester and the profile has a birthday: the
+  /// birthday and age are shown read-only.
+  bool get _birthdayLocked => _isSelf && _profileBirthDate != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileBirthday();
+  }
+
+  Future<void> _loadProfileBirthday() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final birthDate = await ProfileService().fetchBirthday(user.uid);
+      if (!mounted) return;
+      setState(() {
+        _profileBirthDate = birthDate;
+        if (_birthdayLocked) _applyBirthDate(birthDate!);
+      });
+    } catch (e) {
+      debugPrint('Could not load profile birthday: $e');
+    }
+  }
+
+  void _applyBirthDate(DateTime date) {
+    _pickedBirthDate = date;
+    _bdayController.text = Birthday.format(date);
+    _ageController.text = Birthday.age(date).toString();
+  }
+
+  void _onRelationshipChanged(String? value) {
+    final wasLocked = _birthdayLocked;
+    setState(() {
+      _selectedRelationship = value ?? 'Family Member';
+      if (_birthdayLocked) {
+        _applyBirthDate(_profileBirthDate!);
+      } else if (wasLocked) {
+        // Patient is someone else now: their birthday is entered here.
+        _pickedBirthDate = null;
+        _bdayController.clear();
+        _ageController.clear();
+      }
+    });
+  }
+
   @override
   void dispose() {
     _patientNameController.dispose();
@@ -44,12 +99,13 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
 
   // Helper method to show Date Picker for Birthday without the pencil icon
   Future<void> _selectBirthday(BuildContext context) async {
+    if (_birthdayLocked) return; // Read-only from the profile.
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(
         const Duration(days: 365 * 25),
       ), // Default ~25 yrs ago
-      firstDate: DateTime(1900),
+      firstDate: Birthday.firstDate,
       lastDate: DateTime.now(),
       initialEntryMode: DatePickerEntryMode
           .calendarOnly, // Removes the pencil input-mode toggle
@@ -69,20 +125,29 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
     );
 
     if (picked != null) {
-      setState(() {
-        // Format as YYYY-MM-DD
-        _bdayController.text =
-            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-
-        // Auto calculate age if birthday is picked
-        final age = DateTime.now().year - picked.year;
-        _ageController.text = age.toString();
-      });
+      // YYYY-MM-DD, with age calculated from the full date.
+      setState(() => _applyBirthDate(picked));
     }
   }
 
-  void _nextStep() {
+  Future<void> _nextStep() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Self patient on a legacy account: store the birthday once.
+    final user = FirebaseAuth.instance.currentUser;
+    final picked = _pickedBirthDate;
+    if (_isSelf &&
+        _profileBirthDate == null &&
+        user != null &&
+        picked != null) {
+      try {
+        await ProfileService().saveBirthdayIfMissing(user.uid, picked);
+        _profileBirthDate = picked;
+      } catch (e) {
+        debugPrint('Could not save birthday to profile: $e');
+      }
+      if (!mounted) return;
+    }
 
     Navigator.push(
       context,
@@ -210,6 +275,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                           flex: 2,
                           child: TextFormField(
                             controller: _ageController,
+                            readOnly: _birthdayLocked,
                             keyboardType: TextInputType.number,
                             decoration: _inputDecoration(
                               'Age',
@@ -251,11 +317,31 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                     TextFormField(
                       controller: _bdayController,
                       readOnly: true,
-                      onTap: () => _selectBirthday(context),
-                      decoration: _inputDecoration(
-                        'Birthday (YYYY-MM-DD)',
-                        Icons.calendar_today_rounded,
-                      ),
+                      onTap: _birthdayLocked
+                          ? null
+                          : () => _selectBirthday(context),
+                      decoration:
+                          _inputDecoration(
+                            'Birthday (YYYY-MM-DD)',
+                            Icons.calendar_today_rounded,
+                          ).copyWith(
+                            suffixIcon: _birthdayLocked
+                                ? const Icon(
+                                    Icons.lock_outline,
+                                    size: 18,
+                                    color: Colors.black38,
+                                  )
+                                : null,
+                            helperText: _birthdayLocked
+                                ? 'From your profile'
+                                : (_isSelf
+                                      ? 'Saved to your profile once'
+                                      : null),
+                            helperStyle: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black45,
+                            ),
+                          ),
                       validator: (val) => val == null || val.isEmpty
                           ? 'Please select birthday'
                           : null,
@@ -311,9 +397,7 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
                             (r) => DropdownMenuItem(value: r, child: Text(r)),
                           )
                           .toList(),
-                      onChanged: (val) => setState(
-                        () => _selectedRelationship = val ?? 'Family Member',
-                      ),
+                      onChanged: _onRelationshipChanged,
                     ),
                   ],
                 ),

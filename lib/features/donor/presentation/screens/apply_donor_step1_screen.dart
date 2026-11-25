@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../profile/data/profile_service.dart';
+import '../../../profile/domain/birthday.dart';
 import '../../../donor/presentation/widgets/step_indicator.dart';
 import 'apply_donor_step2_screen.dart';
 import '../../../help/presentation/help_guides_screen.dart';
@@ -41,6 +43,10 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
   final _emailController = TextEditingController();
 
   bool _isLoading = true;
+
+  /// Birthday saved on `users/{uid}`; when set the field is read-only.
+  DateTime? _profileBirthDate;
+  DateTime? _pickedBirthDate;
 
   final List<String> _civilStatuses = [
     'Single',
@@ -115,6 +121,11 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
           _mobileController.text = data['mobileNo'] ?? user.phoneNumber ?? '';
           _permAddressController.text = data['permanentAddress'] ?? '';
 
+          // Date of Birth comes from the profile (entered at sign-up).
+          final birthDate = Birthday.fromUserData(data);
+          if (birthDate != null) _applyBirthDate(birthDate);
+          _profileBirthDate = birthDate;
+
           final savedOccupation = data['occupation'] ?? '';
           if (_occupations.contains(savedOccupation)) {
             _occupationValue = savedOccupation;
@@ -143,11 +154,20 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
     super.dispose();
   }
 
+  void _applyBirthDate(DateTime date) {
+    _pickedBirthDate = date;
+    _birthdayController.text =
+        '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    _ageController.text = Birthday.age(date).toString();
+  }
+
+  /// One-time fallback for legacy accounts without a saved birthday.
   Future<void> _selectBirthday(BuildContext context) async {
+    if (_profileBirthDate != null) return; // Read-only from the profile.
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(const Duration(days: 6570)),
-      firstDate: DateTime(1900),
+      firstDate: Birthday.firstDate,
       lastDate: DateTime.now(),
       initialEntryMode: DatePickerEntryMode.calendarOnly,
       builder: (context, child) {
@@ -165,26 +185,25 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
     );
 
     if (picked != null) {
-      setState(() {
-        _birthdayController.text =
-            '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
-        _ageController.text = _calculateAge(picked).toString();
-      });
+      setState(() => _applyBirthDate(picked));
     }
   }
 
-  int _calculateAge(DateTime birthDate) {
-    final today = DateTime.now();
-    int age = today.year - birthDate.year;
-    if (today.month < birthDate.month ||
-        (today.month == birthDate.month && today.day < birthDate.day)) {
-      age--;
-    }
-    return age;
-  }
-
-  void _nextStep() {
+  Future<void> _nextStep() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Legacy account: store the birthday once so it is never asked again.
+    final user = FirebaseAuth.instance.currentUser;
+    final picked = _pickedBirthDate;
+    if (_profileBirthDate == null && user != null && picked != null) {
+      try {
+        await ProfileService().saveBirthdayIfMissing(user.uid, picked);
+        _profileBirthDate = picked;
+      } catch (e) {
+        debugPrint('Could not save birthday to profile: $e');
+      }
+      if (!mounted) return;
+    }
 
     final personalData = {
       'fullName': _fullNameController.text.trim(),
@@ -219,6 +238,7 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
     bool readOnly = false,
     VoidCallback? onTap,
     Widget? suffixIcon,
+    String? helperText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -237,7 +257,11 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
                 return null;
               }
             : null,
-        decoration: _inputDecoration(label).copyWith(suffixIcon: suffixIcon),
+        decoration: _inputDecoration(label).copyWith(
+          suffixIcon: suffixIcon,
+          helperText: helperText,
+          helperStyle: const TextStyle(fontSize: 10, color: Colors.black45),
+        ),
       ),
     );
   }
@@ -413,11 +437,20 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
                                   _birthdayController,
                                   'Birthday (MM/DD/YYYY)',
                                   readOnly: true,
-                                  onTap: () => _selectBirthday(context),
-                                  suffixIcon: const Icon(
-                                    Icons.calendar_today,
+                                  onTap: _profileBirthDate == null
+                                      ? () => _selectBirthday(context)
+                                      : null,
+                                  helperText: _profileBirthDate == null
+                                      ? 'Saved to your profile once'
+                                      : 'From your profile',
+                                  suffixIcon: Icon(
+                                    _profileBirthDate == null
+                                        ? Icons.calendar_today
+                                        : Icons.lock_outline,
                                     size: 18,
-                                    color: donorGreen,
+                                    color: _profileBirthDate == null
+                                        ? donorGreen
+                                        : Colors.black38,
                                   ),
                                 ),
                               ),

@@ -49,6 +49,10 @@ class FirestoreService {
     String? fullname,
 
     required String email,
+
+    /// Date of Birth (`YYYY-MM-DD`) entered at Sign Up. Written only when
+    /// the profile is first created, so it is never overwritten later.
+    String? birthday,
   }) async {
     final docRef = _firestore.collection('users').doc(uid);
 
@@ -61,6 +65,8 @@ class FirestoreService {
         if (fullname != null && fullname.isNotEmpty) 'fullName': fullname,
 
         'email': email.trim().toLowerCase(),
+
+        if (birthday != null && birthday.isNotEmpty) 'birthday': birthday,
 
         'profileCompleted': false,
 

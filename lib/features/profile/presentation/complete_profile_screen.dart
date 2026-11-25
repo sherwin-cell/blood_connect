@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/profile_service.dart';
+import '../domain/birthday.dart';
 import '../domain/sorsogon_locations.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
@@ -29,6 +30,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   bool _isLoading = false;
 
+  /// Date of Birth saved at Sign Up. When set, it is shown read-only and
+  /// never re-sent; when null (Google / legacy account) the user enters it
+  /// here once.
+  DateTime? _savedBirthDate;
+  bool _isLoadingBirthday = true;
+
   @override
   void initState() {
     super.initState();
@@ -37,7 +44,25 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
         _phoneController.text = user.phoneNumber!;
       }
+      _loadSavedBirthday(user.uid);
+    } else {
+      _isLoadingBirthday = false;
     }
+  }
+
+  Future<void> _loadSavedBirthday(String uid) async {
+    DateTime? saved;
+    try {
+      saved = await _profileService.fetchBirthday(uid);
+    } catch (e) {
+      debugPrint('Could not load saved birthday: $e');
+    }
+    if (!mounted) return;
+    setState(() {
+      _savedBirthDate = saved;
+      if (saved != null) _birthdayController.text = Birthday.format(saved);
+      _isLoadingBirthday = false;
+    });
   }
 
   @override
@@ -49,6 +74,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   Future<void> _selectDateOfBirth(BuildContext context) async {
+    if (_savedBirthDate != null) return; // Locked: entered at sign-up.
     DateTime initialDate;
 
     if (_birthdayController.text.isNotEmpty) {
@@ -64,7 +90,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate: DateTime(1900),
+      firstDate: Birthday.firstDate,
       lastDate: DateTime.now(),
 
       // Calendar only — removes the text/pencil entry mode
@@ -88,15 +114,13 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
     if (picked != null) {
       setState(() {
-        _birthdayController.text =
-            '${picked.year}-'
-            '${picked.month.toString().padLeft(2, '0')}-'
-            '${picked.day.toString().padLeft(2, '0')}';
+        _birthdayController.text = Birthday.format(picked);
       });
     }
   }
 
   Future<void> _onSaveProfile() async {
+    if (_isLoadingBirthday) return;
     if (!_formKey.currentState!.validate()) return;
 
     final user = FirebaseAuth.instance.currentUser;
@@ -111,7 +135,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       await _profileService.updateProfile(
         uid: user.uid,
         phoneNumber: _phoneController.text.trim(),
-        birthday: _birthdayController.text.trim(),
+        // Only a legacy account without a saved birthday writes one here.
+        birthday: _savedBirthDate == null
+            ? Birthday.format(Birthday.parse(_birthdayController.text)!)
+            : null,
         nationality: _selectedNationality,
         province: _selectedProvince,
         municipality: _selectedMunicipality,
@@ -195,26 +222,68 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const _FieldLabel('Date of Birth *'),
-                    TextFormField(
-                      controller: _birthdayController,
-                      readOnly: true,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      onTap: () => _selectDateOfBirth(context),
-                      decoration: _inputDecoration('YYYY-MM-DD').copyWith(
-                        suffixIcon: const Icon(
-                          Icons.calendar_today_rounded,
-                          size: 18,
+                    if (_isLoadingBirthday)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: LinearProgressIndicator(
                           color: AppColors.primaryRed,
                         ),
+                      )
+                    else if (_savedBirthDate != null)
+                      // Entered at sign-up: locked.
+                      TextFormField(
+                        key: const ValueKey('complete-profile-birthday-locked'),
+                        initialValue:
+                            '${Birthday.format(_savedBirthDate!)}  ·  '
+                            '${Birthday.age(_savedBirthDate!)} years old',
+                        enabled: false,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: _inputDecoration('').copyWith(
+                          suffixIcon: const Icon(
+                            Icons.lock_outline_rounded,
+                            size: 18,
+                            color: Colors.black38,
+                          ),
+                          helperText: 'Entered at sign-up',
+                          helperStyle: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      )
+                    else
+                      // Google / legacy account with no saved birthday:
+                      // one-time entry.
+                      TextFormField(
+                        key: const ValueKey('complete-profile-birthday-input'),
+                        controller: _birthdayController,
+                        readOnly: true,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        onTap: () => _selectDateOfBirth(context),
+                        decoration: _inputDecoration('YYYY-MM-DD').copyWith(
+                          suffixIcon: const Icon(
+                            Icons.calendar_today_rounded,
+                            size: 18,
+                            color: AppColors.primaryRed,
+                          ),
+                          helperText:
+                              'You enter this once. It cannot be changed later.',
+                          helperStyle: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        validator: (v) =>
+                            Birthday.validate(Birthday.parse(v ?? '')),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Date of Birth is required'
-                          : null,
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -441,7 +510,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _onSaveProfile,
+                    onPressed: _isLoading || _isLoadingBirthday
+                        ? null
+                        : _onSaveProfile,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryRed,
                       foregroundColor: Colors.white,

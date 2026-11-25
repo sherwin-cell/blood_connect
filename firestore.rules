@@ -251,6 +251,24 @@ service cloud.firestore {
             'nextEligibleDonationDate',
             'donationIntervalMonths'
           ])
+        // Date of Birth is entered once (Sign Up, or the one-time fallback
+        // for older accounts). The owner may set it only while it is
+        // missing or empty, as YYYY-MM-DD, and never change or remove it
+        // afterwards. PRC corrects it through the isAdmin() branch.
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['birthday'])
+          || (
+            (
+              !('birthday' in resource.data)
+              || resource.data.birthday == null
+              || resource.data.birthday == ''
+            )
+            && request.resource.data.get('birthday', null) is string
+            && request.resource.data.birthday
+                 .matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          )
+        )
         // Notification Settings writes a map of switches (read by the
         // backend before each push).
         && (
