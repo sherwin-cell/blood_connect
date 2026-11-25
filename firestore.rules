@@ -83,6 +83,14 @@ service cloud.firestore {
     // must never create or modify.
     function donorAdminFields() {
       return [
+        // Declared when applying and verified by PRC at screening; offers
+        // are matched against it, so only PRC may change it afterwards. A
+        // donor can declare a new one only in a new application (below).
+        'bloodType',
+
+        // Only PRC decides whether a rejected applicant may apply again.
+        'reapplicationAllowed',
+
         'applicationStatus',
         'donorStatus',
         'status',
@@ -160,6 +168,8 @@ service cloud.firestore {
           'reviewedBy',
           'reviewedAt',
           'rejectionReason',
+          // PRC sets this only when it rejects an application.
+          'reapplicationAllowed',
 
           'donorActivationStatus',
           'activatedAt',
@@ -553,7 +563,7 @@ service cloud.firestore {
           && !request.resource.data
             .diff(resource.data)
             .affectedKeys()
-            .hasAny(['status', 'donorCode'])
+            .hasAny(['status', 'donorCode', 'donorBloodType'])
           // Never add the donor's identity: the requester can read offers.
           && !request.resource.data
             .diff(resource.data)

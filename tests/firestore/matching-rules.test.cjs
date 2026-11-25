@@ -209,6 +209,11 @@ async function main() {
       () => updateDoc(doc(db(donor), "blood_requests", requestId, "offers", offerId),
         { donorName: "Maria Santos" }), false);
 
+    // R2: the offer's blood type is fixed when the donor offers.
+    await test("A donor cannot change the blood type on their offer",
+      () => updateDoc(doc(db(donor), "blood_requests", requestId, "offers", offerId),
+        { donorBloodType: "O-" }), false);
+
     // ---------------------------------------------------------------
     // Donor codes (anonymised DNR-xxxx)
     // ---------------------------------------------------------------

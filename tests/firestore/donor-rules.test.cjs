@@ -10,6 +10,7 @@ const {
   doc,
   setDoc,
   updateDoc,
+  deleteField,
 } = require("firebase/firestore");
 
 const PROJECT_ID = "blood-connect-12ac2";
@@ -31,6 +32,22 @@ async function main() {
 
   const donorId = "test-donor-001";
   const adminId = "test-prc-admin-001";
+  const rejectedId = "test-donor-rejected-001";
+  const allowedId = "test-donor-allowed-001";
+  const newApplicantId = "test-donor-new-001";
+
+  // Same shape as the app's donor application (FirestoreService
+  // _submitDonorApplication): a full replacement, always pending.
+  const application = (uid, applicationId, extra = {}) => ({
+    userId: uid,
+    fullName: "Applicant",
+    bloodType: "A+",
+    applicationId,
+    applicationStatus: "pending",
+    donorStatus: "pending",
+    status: "pending",
+    ...extra,
+  });
 
   let passed = 0;
   let failed = 0;
@@ -82,6 +99,32 @@ async function main() {
         collectionStatus: "completed",
         donationAvailabilityStatus: "medical_hold",
         nextEligibleDonationDate: "2027-01-22",
+      });
+
+      // Rejected; PRC did not allow reapplication.
+      await setDoc(doc(db, "donors", rejectedId), {
+        userId: rejectedId,
+        fullName: "Rejected Donor",
+        bloodType: "B+",
+        applicationId: "app-rejected-1",
+        applicationStatus: "rejected",
+        donorStatus: "rejected",
+        status: "rejected",
+        rejectionReason: "Test rejection",
+        reapplicationAllowed: false,
+      });
+
+      // Rejected; PRC allowed reapplication.
+      await setDoc(doc(db, "donors", allowedId), {
+        userId: allowedId,
+        fullName: "Allowed Donor",
+        bloodType: "B+",
+        applicationId: "app-allowed-1",
+        applicationStatus: "rejected",
+        donorStatus: "rejected",
+        status: "rejected",
+        rejectionReason: "Test rejection",
+        reapplicationAllowed: true,
       });
     });
 
@@ -159,6 +202,97 @@ async function main() {
           reviewedBy: adminId,
           reviewedAt: new Date(),
         },
+      }),
+      true
+    );
+
+    console.log("\n--- BLOOD TYPE (R2) ---\n");
+
+    await test(
+      "Approved donor cannot change their own blood type",
+      () => updateDoc(donorRef, { bloodType: "AB+" }),
+      false
+    );
+
+    await test(
+      "Donor cannot remove their blood type",
+      () => updateDoc(donorRef, { bloodType: deleteField() }),
+      false
+    );
+
+    await test(
+      "PRC administrator can correct a donor's blood type",
+      () => updateDoc(adminDonorRef, { bloodType: "O-" }),
+      true
+    );
+
+    console.log("\n--- REAPPLICATION (R3) ---\n");
+
+    const dbOf = (uid) => testEnv.authenticatedContext(uid).firestore();
+
+    await test(
+      "Rejected applicant cannot allow their own reapplication",
+      () => updateDoc(doc(dbOf(rejectedId), "donors", rejectedId), {
+        reapplicationAllowed: true,
+      }),
+      false
+    );
+
+    await test(
+      "Rejected applicant cannot reapply when PRC did not allow it",
+      () => setDoc(
+        doc(dbOf(rejectedId), "donors", rejectedId),
+        application(rejectedId, "app-rejected-2")
+      ),
+      false
+    );
+
+    await test(
+      "Approved donor cannot set reapplicationAllowed",
+      () => updateDoc(donorRef, { reapplicationAllowed: true }),
+      false
+    );
+
+    await test(
+      "A new application cannot carry reapplicationAllowed",
+      () => setDoc(
+        doc(dbOf(newApplicantId), "donors", newApplicantId),
+        application(newApplicantId, "app-new-1", { reapplicationAllowed: true })
+      ),
+      false
+    );
+
+    await test(
+      "A new application without reapplicationAllowed is accepted",
+      () => setDoc(
+        doc(dbOf(newApplicantId), "donors", newApplicantId),
+        application(newApplicantId, "app-new-1")
+      ),
+      true
+    );
+
+    await test(
+      "A reapplication cannot keep reapplicationAllowed",
+      () => setDoc(
+        doc(dbOf(allowedId), "donors", allowedId),
+        application(allowedId, "app-allowed-2", { reapplicationAllowed: true })
+      ),
+      false
+    );
+
+    await test(
+      "Rejected applicant PRC allowed can reapply with a new blood type",
+      () => setDoc(
+        doc(dbOf(allowedId), "donors", allowedId),
+        application(allowedId, "app-allowed-2", { bloodType: "AB-" })
+      ),
+      true
+    );
+
+    await test(
+      "PRC administrator can allow reapplication",
+      () => updateDoc(doc(adminDb, "donors", rejectedId), {
+        reapplicationAllowed: true,
       }),
       true
     );
