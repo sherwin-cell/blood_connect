@@ -138,7 +138,17 @@ abstract final class DonorEligibility {
   static bool canDonate(Map<String, dynamic> donor, {DateTime? today}) =>
       blockingReason(donor, today: today) == null;
 
+  /// Shown when PRC has not recorded a valid next eligible date.
+  static const missingDateReason =
+      'PRC has not recorded your next donation date yet. Please contact '
+      'PRC-Sorsogon.';
+
   /// A user-facing reason the donor cannot offer, or null if they can.
+  ///
+  /// Fails closed, like isEligibleDonor() in firestore.rules and
+  /// is_donor_eligible in blood_connect_backend: without a valid
+  /// `nextEligibleDonationDate` the donor cannot offer. [today] defaults to
+  /// the current date in Philippine time (UTC+8), as the rules use.
   static String? blockingReason(Map<String, dynamic> donor, {DateTime? today}) {
     final status = donor['donorStatus']?.toString().trim().toLowerCase();
     if (status != DonorStatus.approved || donor['isDonor'] != true) {
@@ -148,24 +158,38 @@ abstract final class DonorEligibility {
       return 'You are currently marked unavailable for donation.';
     }
     final next = nextEligibleDate(donor);
-    final now = today ?? DateTime.now();
-    if (next != null && _dateOnly(now).isBefore(next)) {
+    if (next == null) return missingDateReason;
+    final now = today ?? philippinesToday();
+    if (_dateOnly(now).isBefore(next)) {
       return 'You can donate again from ${_format(next)}.';
     }
     return null;
   }
 
-  /// Parses `nextEligibleDonationDate` (`YYYY-MM-DD`), or null.
+  /// Today's calendar date in the Philippines (UTC+8), whatever the
+  /// device's time zone.
+  static DateTime philippinesToday({DateTime? nowUtc}) {
+    final ph = (nowUtc ?? DateTime.now()).toUtc().add(const Duration(hours: 8));
+    return DateTime(ph.year, ph.month, ph.day);
+  }
+
+  /// Parses `nextEligibleDonationDate`, or null unless it is a real
+  /// `YYYY-MM-DD` date string (same check as firestore.rules: no
+  /// surrounding spaces, and impossible dates such as 2025-02-31 rejected).
   static DateTime? nextEligibleDate(Map<String, dynamic> donor) {
     final raw = donor['nextEligibleDonationDate'];
     if (raw is! String) return null;
-    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(raw.trim());
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(raw);
     if (match == null) return null;
-    return DateTime(
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3)!),
-    );
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final date = DateTime(year, month, day);
+    // DateTime rolls over invalid dates (Feb 31 -> Mar 3); reject those.
+    if (date.year != year || date.month != month || date.day != day) {
+      return null;
+    }
+    return date;
   }
 
   static String _format(DateTime d) =>

@@ -46,11 +46,12 @@ void main() {
 
   group('DonorEligibility', () {
     final today = DateTime(2026, 11, 22);
+    // Activated donors always carry the date PRC set at activation.
     Map<String, dynamic> donor({
       String status = 'approved',
       bool isDonor = true,
       bool available = true,
-      String? nextEligible,
+      Object? nextEligible = '2026-01-15',
     }) => {
       'donorStatus': status,
       'isDonor': isDonor,
@@ -58,8 +59,63 @@ void main() {
       'nextEligibleDonationDate': ?nextEligible,
     };
 
-    test('approved, available donor with no interval can donate', () {
+    test('approved, available donor past their interval can donate', () {
       expect(DonorEligibility.canDonate(donor(), today: today), isTrue);
+    });
+
+    test('fails closed without a valid next eligible date', () {
+      final missing = donor()..remove('nextEligibleDonationDate');
+      final cases = <String, Map<String, dynamic>>{
+        'missing': missing,
+        'null': {...donor(), 'nextEligibleDonationDate': null},
+        'empty': donor(nextEligible: ''),
+        'slashes': donor(nextEligible: '01/15/2026'),
+        'single-digit month': donor(nextEligible: '2026-1-15'),
+        'leading space': donor(nextEligible: ' 2026-01-15'),
+        'month 13': donor(nextEligible: '2026-13-01'),
+        'impossible Feb 31': donor(nextEligible: '2026-02-31'),
+        'number': donor(nextEligible: 20260115),
+        'DateTime object': donor(nextEligible: DateTime(2026, 1, 15)),
+      };
+      for (final entry in cases.entries) {
+        expect(
+          DonorEligibility.blockingReason(entry.value, today: today),
+          DonorEligibility.missingDateReason,
+          reason: entry.key,
+        );
+        expect(
+          DonorEligibility.canDonate(entry.value, today: today),
+          isFalse,
+          reason: entry.key,
+        );
+      }
+    });
+
+    test('impossible dates are not rolled over', () {
+      expect(
+        DonorEligibility.nextEligibleDate(donor(nextEligible: '2026-02-31')),
+        isNull,
+      );
+      expect(
+        DonorEligibility.nextEligibleDate(donor(nextEligible: '2024-02-29')),
+        DateTime(2024, 2, 29),
+      );
+    });
+
+    test('"today" is the Philippine date, not the device date', () {
+      // 2026-11-21 17:30 UTC is already 2026-11-22 01:30 in the Philippines.
+      expect(
+        DonorEligibility.philippinesToday(
+          nowUtc: DateTime.utc(2026, 11, 21, 17, 30),
+        ),
+        DateTime(2026, 11, 22),
+      );
+      expect(
+        DonorEligibility.philippinesToday(
+          nowUtc: DateTime.utc(2026, 11, 21, 15, 59),
+        ),
+        DateTime(2026, 11, 21),
+      );
     });
 
     test('pending donor cannot donate', () {
@@ -96,7 +152,7 @@ void main() {
       );
     });
 
-    test('malformed next eligible date is ignored', () {
+    test('malformed next eligible date parses to null', () {
       expect(
         DonorEligibility.nextEligibleDate(donor(nextEligible: '12/01/2026')),
         isNull,
