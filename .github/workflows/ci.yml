@@ -1,0 +1,67 @@
+# Runs on every push and pull request. Uses no secrets: the Flutter tests run
+# without Firebase, and the Firestore rules tests run against the local
+# emulator only.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analyze and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.4
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  firestore-rules:
+    name: Firestore security rules (emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Firestore emulator needs Java 21+.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - run: npm ci
+
+      # Each suite exits non-zero when a test fails. Run from the repo root
+      # (verification-rules.test.cjs reads ./firestore.rules).
+      - name: Run all rules suites
+        run: >-
+          npx --yes firebase-tools@15.24.0 emulators:exec
+          --only firestore
+          --project blood-connect-12ac2
+          "node tests/firestore/donor-rules.test.cjs
+          && node tests/firestore/matching-rules.test.cjs
+          && node tests/firestore/lifecycle-rules.test.cjs
+          && node tests/firestore/profile-rules.test.cjs
+          && node tests/firestore/face-verification-rules.test.cjs
+          && node tests/firestore/verification-rules.test.cjs"

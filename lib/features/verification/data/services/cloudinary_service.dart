@@ -20,10 +20,6 @@ class CloudinaryService {
       throw Exception('Image file is empty.');
     }
 
-    debugPrint('========== CLOUDINARY UPLOAD ==========');
-    debugPrint('File: ${imageFile.path}');
-    debugPrint('File size: $fileLength bytes');
-
     final uri = Uri.parse(
       'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
     );
@@ -37,14 +33,9 @@ class CloudinaryService {
         await http.MultipartFile.fromPath('file', imageFile.path),
       );
 
-      debugPrint('Sending image to Cloudinary...');
-
       final response = await request.send();
 
       final responseBody = await response.stream.bytesToString();
-
-      debugPrint('Cloudinary HTTP Status: ${response.statusCode}');
-      debugPrint('Cloudinary Response: $responseBody');
 
       // Successful upload
       if (response.statusCode == 200) {
@@ -61,10 +52,6 @@ class CloudinaryService {
             'Cloudinary upload succeeded but no secure_url was returned.',
           );
         }
-
-        debugPrint('Cloudinary upload successful.');
-        debugPrint('Secure URL: $secureUrl');
-        debugPrint('======================================');
 
         return secureUrl.toString();
       }
@@ -86,21 +73,13 @@ class CloudinaryService {
         // Keep the original response if it is not valid JSON.
       }
 
-      debugPrint('Cloudinary upload FAILED.');
-      debugPrint('Status: ${response.statusCode}');
-      debugPrint('Error: $errorMessage');
-      debugPrint('======================================');
-
       throw Exception(
         'Cloudinary upload failed '
         '(HTTP ${response.statusCode}): $errorMessage',
       );
-    } catch (e, stackTrace) {
-      debugPrint('========== CLOUDINARY ERROR ==========');
-      debugPrint('Error: $e');
-      debugPrint('Stack trace: $stackTrace');
-      debugPrint('======================================');
-
+    } catch (e) {
+      // Status and Cloudinary's message only; never the file or its URL.
+      debugPrint('Cloudinary upload error: $e');
       rethrow;
     }
   }

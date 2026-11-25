@@ -1,5 +1,6 @@
 
 const fs = require("node:fs");
+const path = require("node:path");
 const {
   initializeTestEnvironment,
   assertSucceeds,
@@ -15,8 +16,8 @@ const {
 
 const PROJECT_ID = "blood-connect-12ac2";
 
-const RULES_PATH =
-  "C:/Users/Joyleen/development/blood_connect/firestore.rules";
+// Relative to this file, so the suite runs on any machine (and in CI).
+const RULES_PATH = path.join(__dirname, "..", "..", "firestore.rules");
 
 async function main() {
   const rules = fs.readFileSync(RULES_PATH, "utf8");

@@ -141,7 +141,7 @@ class PushNotificationService {
       _registeredUid = uid;
       _registeredToken = token;
 
-      debugPrint('FCM token registered for user: $uid');
+      debugPrint('FCM token registered.');
     } catch (error, stackTrace) {
       debugPrint('FCM token registration failed: $error');
       debugPrintStack(stackTrace: stackTrace);

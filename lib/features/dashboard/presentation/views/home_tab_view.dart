@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/config/feature_flags.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../profile/domain/user_profile_model.dart';
 import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
@@ -557,15 +558,18 @@ class HomeTabView extends StatelessWidget {
             context,
           ).push(MaterialPageRoute(builder: (_) => const HelpGuidesScreen())),
         ),
-        const SizedBox(width: 8),
-        _buildInfoServiceItem(
-          Icons.campaign_outlined,
-          'Announcements',
-          underDevelopment: true,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+        // Hidden until announcements are finished (see FeatureFlags).
+        if (FeatureFlags.announcements) ...[
+          const SizedBox(width: 8),
+          _buildInfoServiceItem(
+            Icons.campaign_outlined,
+            'Announcements',
+            underDevelopment: true,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

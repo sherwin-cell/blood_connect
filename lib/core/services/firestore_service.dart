@@ -87,74 +87,6 @@ class FirestoreService {
     }, SetOptions(merge: true));
   }
 
-  /// Called by CompleteProfileScreen when saving operational contact & location details.
-
-  Future<void> updateProfile({
-    required String uid,
-
-    required String phoneNumber,
-
-    String? province,
-
-    String? municipality,
-
-    String? barangay,
-  }) async {
-    await _firestore.collection('users').doc(uid).set({
-      'uid': uid,
-
-      'phoneNumber': phoneNumber,
-
-      'province': ?province,
-
-      'municipality': ?municipality,
-
-      'barangay': ?barangay,
-
-      'profileCompleted': true,
-
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
-  /// Kept for backward compatibility
-
-  Future<void> createUser({
-    required String uid,
-
-    required String name,
-
-    required String email,
-  }) async {
-    await createUserProfile(uid: uid, fullname: name, email: email);
-  }
-
-  Future<bool> userExists(String uid) async {
-    final doc = await _firestore.collection('users').doc(uid).get();
-
-    return doc.exists;
-  }
-
-  // ==========================================
-
-  // FACE VERIFICATION (ACCOUNT)
-
-  // ==========================================
-
-  /// Fetches whether the user's face has been verified.
-
-  Future<bool> getFaceVerificationStatus(String userId) async {
-    final doc = await _firestore.collection('users').doc(userId).get();
-
-    if (!doc.exists) return false;
-
-    final data = doc.data();
-
-    if (data == null) return false;
-
-    return data['faceVerified'] as bool? ?? false;
-  }
-
   // ==========================================
 
   // ID VERIFICATION STATUS & SUBMISSION
@@ -404,20 +336,5 @@ class FirestoreService {
     });
 
     return docId;
-  }
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> getUserBloodRequests(
-    String userId,
-  ) {
-    return _firestore
-        .collection('blood_requests')
-        .where('userId', isEqualTo: userId)
-        .snapshots();
-  }
-
-  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserDonorApplication(
-    String userId,
-  ) {
-    return _firestore.collection('donors').doc(userId).snapshots();
   }
 }

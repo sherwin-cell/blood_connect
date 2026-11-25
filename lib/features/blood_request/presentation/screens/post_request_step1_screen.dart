@@ -8,7 +8,18 @@ import '../widgets/step_indicator.dart';
 import '../../../help/presentation/help_guides_screen.dart';
 
 class PostRequestStep1Screen extends StatefulWidget {
-  const PostRequestStep1Screen({super.key});
+  const PostRequestStep1Screen({
+    super.key,
+    this.currentUid,
+    this.fetchBirthday,
+    this.saveBirthdayIfMissing,
+  });
+
+  /// Test hooks; default to FirebaseAuth and [ProfileService].
+  final String? Function()? currentUid;
+  final Future<DateTime?> Function(String uid)? fetchBirthday;
+  final Future<void> Function(String uid, DateTime birthDate)?
+  saveBirthdayIfMissing;
 
   @override
   State<PostRequestStep1Screen> createState() => _PostRequestStep1ScreenState();
@@ -39,6 +50,13 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
   DateTime? _profileBirthDate;
   DateTime? _pickedBirthDate;
 
+  /// True while Next is saving the birthday: further taps are ignored so
+  /// step 2 is opened only once.
+  bool _saving = false;
+
+  String? _uid() =>
+      (widget.currentUid ?? () => FirebaseAuth.instance.currentUser?.uid)();
+
   bool get _isSelf => _selectedRelationship == 'Self';
 
   /// The patient is the requester and the profile has a birthday: the
@@ -52,10 +70,11 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
   }
 
   Future<void> _loadProfileBirthday() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    final uid = _uid();
+    if (uid == null) return;
     try {
-      final birthDate = await ProfileService().fetchBirthday(user.uid);
+      final birthDate =
+          await (widget.fetchBirthday ?? ProfileService().fetchBirthday)(uid);
       if (!mounted) return;
       setState(() {
         _profileBirthDate = birthDate;
@@ -131,22 +150,23 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
   }
 
   Future<void> _nextStep() async {
+    if (_saving) return; // a second tap while the birthday is saving
     if (!_formKey.currentState!.validate()) return;
 
     // Self patient on a legacy account: store the birthday once.
-    final user = FirebaseAuth.instance.currentUser;
+    final uid = _uid();
     final picked = _pickedBirthDate;
-    if (_isSelf &&
-        _profileBirthDate == null &&
-        user != null &&
-        picked != null) {
+    if (_isSelf && _profileBirthDate == null && uid != null && picked != null) {
+      setState(() => _saving = true);
       try {
-        await ProfileService().saveBirthdayIfMissing(user.uid, picked);
+        await (widget.saveBirthdayIfMissing ??
+            ProfileService().saveBirthdayIfMissing)(uid, picked);
         _profileBirthDate = picked;
       } catch (e) {
         debugPrint('Could not save birthday to profile: $e');
       }
       if (!mounted) return;
+      setState(() => _saving = false);
     }
 
     Navigator.push(
@@ -438,28 +458,45 @@ class _PostRequestStep1ScreenState extends State<PostRequestStep1Screen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _nextStep,
+                  key: const ValueKey('requestStep1Next'),
+                  onPressed: _saving ? null : _nextStep,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryRed,
+                    disabledBackgroundColor: AppColors.primaryRed.withValues(
+                      alpha: 0.6,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Text(
-                        'Next: Blood Details',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Text(
+                              'Next: Blood Details',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ],
                         ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.chevron_right, color: Colors.white, size: 18),
-                    ],
-                  ),
                 ),
               ),
             ],

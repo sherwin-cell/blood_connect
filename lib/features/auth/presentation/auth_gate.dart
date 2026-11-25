@@ -23,12 +23,6 @@ class AuthGate extends StatelessWidget {
 
         final user = snapshot.data;
 
-        debugPrint('========== AUTH DEBUG ==========');
-        debugPrint('Current User: ${user?.uid}');
-        debugPrint('Email: ${user?.email}');
-        debugPrint('Display Name: ${user?.displayName}');
-        debugPrint('================================');
-
         if (user == null) {
           unawaited(PushNotificationService.instance.clearRegisteredUser());
           return const WelcomeScreen();

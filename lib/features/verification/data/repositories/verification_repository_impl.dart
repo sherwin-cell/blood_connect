@@ -33,11 +33,6 @@ class VerificationRepositoryImpl implements IVerificationRepository {
   }
 
   @override
-  Future<bool> getFaceVerificationStatus(String userId) async {
-    return await firestoreService.getFaceVerificationStatus(userId);
-  }
-
-  @override
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
     required String frontIdPath,
     String? backIdPath,

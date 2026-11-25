@@ -10,7 +10,19 @@ import 'apply_donor_step2_screen.dart';
 import '../../../help/presentation/help_guides_screen.dart';
 
 class ApplyDonorStep1Screen extends StatefulWidget {
-  const ApplyDonorStep1Screen({super.key});
+  const ApplyDonorStep1Screen({
+    super.key,
+    this.currentUser,
+    this.loadProfile,
+    this.saveBirthdayIfMissing,
+  });
+
+  /// Test hooks; default to FirebaseAuth, users/{uid} and [ProfileService].
+  final ({String uid, String? email, String? phoneNumber})? Function()?
+  currentUser;
+  final Future<Map<String, dynamic>?> Function(String uid)? loadProfile;
+  final Future<void> Function(String uid, DateTime birthDate)?
+  saveBirthdayIfMissing;
 
   @override
   State<ApplyDonorStep1Screen> createState() => _ApplyDonorStep1ScreenState();
@@ -43,6 +55,27 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
   final _emailController = TextEditingController();
 
   bool _isLoading = true;
+
+  /// True while Next is saving the birthday: further taps are ignored so
+  /// step 2 is opened only once.
+  bool _saving = false;
+
+  ({String uid, String? email, String? phoneNumber})? _user() {
+    if (widget.currentUser != null) return widget.currentUser!();
+    final user = FirebaseAuth.instance.currentUser;
+    return user == null
+        ? null
+        : (uid: user.uid, email: user.email, phoneNumber: user.phoneNumber);
+  }
+
+  Future<Map<String, dynamic>?> _profile(String uid) async {
+    if (widget.loadProfile != null) return widget.loadProfile!(uid);
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    return doc.exists ? doc.data() : null;
+  }
 
   /// Birthday saved on `users/{uid}`; when set the field is read-only.
   DateTime? _profileBirthDate;
@@ -95,19 +128,14 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
 
   Future<void> _loadUserData() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _user();
 
       if (user != null) {
         _emailController.text = user.email ?? '';
 
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
+        final data = await _profile(user.uid);
 
-        if (doc.exists) {
-          final data = doc.data()!;
-
+        if (data != null) {
           final firstName = data['firstName'] ?? '';
           final lastName = data['lastName'] ?? '';
           final middleName = data['middleName'] ?? '';
@@ -190,19 +218,23 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
   }
 
   Future<void> _nextStep() async {
+    if (_saving) return; // a second tap while the birthday is saving
     if (!_formKey.currentState!.validate()) return;
 
     // Legacy account: store the birthday once so it is never asked again.
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _user();
     final picked = _pickedBirthDate;
     if (_profileBirthDate == null && user != null && picked != null) {
+      setState(() => _saving = true);
       try {
-        await ProfileService().saveBirthdayIfMissing(user.uid, picked);
+        await (widget.saveBirthdayIfMissing ??
+            ProfileService().saveBirthdayIfMissing)(user.uid, picked);
         _profileBirthDate = picked;
       } catch (e) {
         debugPrint('Could not save birthday to profile: $e');
       }
       if (!mounted) return;
+      setState(() => _saving = false);
     }
 
     final personalData = {
@@ -628,34 +660,47 @@ class _ApplyDonorStep1ScreenState extends State<ApplyDonorStep1Screen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _nextStep,
+                        key: const ValueKey('donorStep1Next'),
+                        onPressed: _saving ? null : _nextStep,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: donorGreen,
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: donorGreen.withValues(
+                            alpha: 0.6,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           elevation: 0,
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Next: Blood Type & History',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                        child: _saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Next: Blood Type & History',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  SizedBox(width: 4),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ],
                               ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(
-                              Icons.chevron_right,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                     const SizedBox(height: 8),

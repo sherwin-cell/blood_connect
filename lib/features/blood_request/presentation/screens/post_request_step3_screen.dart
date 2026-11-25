@@ -83,26 +83,15 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
     if (_isUploadingPdf) return;
 
     try {
-      debugPrint('========================================');
-      debugPrint('BRF PDF: Starting file picker');
-      debugPrint('========================================');
-
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
       );
 
-      if (result.isEmpty) {
-        debugPrint('BRF PDF: User cancelled file picker.');
-        return;
-      }
+      if (result.isEmpty) return; // picker cancelled
 
       final PlatformFile platformFile = result.first;
       final String fileName = platformFile.name;
-
-      debugPrint('BRF PDF: File selected');
-      debugPrint('BRF PDF: Name = $fileName');
-      debugPrint('BRF PDF: Path = ${platformFile.path}');
 
       if (!fileName.toLowerCase().endsWith('.pdf')) {
         if (!mounted) return;
@@ -120,8 +109,6 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
       final String? filePath = platformFile.path;
 
       if (filePath == null || filePath.isEmpty) {
-        debugPrint('BRF PDF: File path is null or empty.');
-
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -136,8 +123,6 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
 
       final File file = File(filePath);
       final bool fileExists = await file.exists();
-
-      debugPrint('BRF PDF: File exists = $fileExists');
 
       if (!fileExists) {
         throw Exception('The selected PDF file could not be found.');
@@ -173,12 +158,9 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
           backgroundColor: Colors.green,
         ),
       );
-    } catch (e, stackTrace) {
-      debugPrint('========================================');
-      debugPrint('BRF PDF UPLOAD ERROR');
-      debugPrint('Error: $e');
-      debugPrint('Stack trace: $stackTrace');
-      debugPrint('========================================');
+    } catch (e) {
+      // Never log the form's name, path or secure:// reference.
+      debugPrint('BRF PDF upload error: $e');
 
       if (!mounted) return;
 
@@ -230,12 +212,6 @@ class _PostRequestStep3ScreenState extends State<PostRequestStep3Screen> {
 
       return;
     }
-
-    debugPrint('========================================');
-    debugPrint('BRF PDF: Moving to Step 4');
-    debugPrint('BRF File Name: $_brfFileName');
-    debugPrint('BRF File URL: $_brfFileUrl');
-    debugPrint('========================================');
 
     Navigator.push(
       context,

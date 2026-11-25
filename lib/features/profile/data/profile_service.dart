@@ -8,25 +8,6 @@ class ProfileService {
   ProfileService({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  /// Returns a real-time stream of the user profile document for reactive navigation (AuthGate / ProfileGate).
-  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserProfileStream(
-    String uid,
-  ) {
-    return _firestore.collection('users').doc(uid).snapshots();
-  }
-
-  /// Checks once if the user has completed their profile.
-  Future<bool> isProfileCompleted(String uid) async {
-    try {
-      final doc = await _firestore.collection('users').doc(uid).get();
-      if (!doc.exists) return false;
-      final data = doc.data();
-      return data?['profileCompleted'] == true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// The Date of Birth saved on `users/{uid}` (entered at Sign Up), or
   /// null for accounts that never entered one (Google / legacy).
   Future<DateTime?> fetchBirthday(String uid) async {

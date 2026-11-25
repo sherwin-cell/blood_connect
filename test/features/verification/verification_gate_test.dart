@@ -28,9 +28,6 @@ class _FakeVerificationRepository implements IVerificationRepository {
   Future<File?> cropPrimaryFace(File imageFile) async => imageFile;
 
   @override
-  Future<bool> getFaceVerificationStatus(String userId) async => false;
-
-  @override
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({
     required String frontIdPath,
     String? backIdPath,

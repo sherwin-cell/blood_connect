@@ -11,9 +11,6 @@ abstract class IVerificationRepository {
   /// Crop the primary face from an image (selfie pre-check before upload).
   Future<File?> cropPrimaryFace(File imageFile);
 
-  /// Checks if users/{uid}.faceVerified is true (written only by the backend).
-  Future<bool> getFaceVerificationStatus(String userId);
-
   /// Uploads ID images privately through the backend and returns their
   /// secure:// references. Does not write Firestore.
   Future<({String frontUrl, String? backUrl})> uploadRequestIdImages({

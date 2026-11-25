@@ -35,7 +35,7 @@ class FaceDetectorService {
   }) async {
     final faces = await _detectFaces(imageFile);
     if (faces.isEmpty) {
-      debugPrint('FaceDetectorService: no face to crop in ${imageFile.path}');
+      debugPrint('FaceDetectorService: no face to crop.');
       return null;
     }
 
