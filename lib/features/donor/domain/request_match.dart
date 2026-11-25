@@ -41,7 +41,7 @@ class MatchedDonor {
         .toUpperCase();
     return MatchedDonor(
       offerId: offerId,
-      code: donorCode(offerId, data['donorCode']),
+      code: donorCode(data['donorCode']),
       bloodType: blood.isEmpty ? '—' : blood,
       donated:
           data['status']?.toString().trim().toLowerCase() ==
@@ -53,24 +53,32 @@ class MatchedDonor {
 
   final String offerId;
 
-  /// "DNR-0023"
-  final String code;
+  /// The PRC-assigned code, e.g. "DNR-0023", or null while PRC has not
+  /// assigned one yet.
+  final String? code;
   final String bloodType;
   final bool donated;
   final DateTime? confirmedAt;
   final DateTime? donatedAt;
 
-  /// The offer's `donorCode` when PRC set one, else a stable 4-digit code
-  /// derived from the offer ID (not the donor's uid, so it cannot be used
-  /// to link the same donor across requests).
-  static String donorCode(String offerId, [dynamic stored]) {
+  /// Shown in place of a code PRC has not assigned yet.
+  static const pendingCodeLabel = 'Code pending';
+
+  /// [code], or [pendingCodeLabel] while there is none.
+  String get displayCode => code ?? pendingCodeLabel;
+
+  bool get hasCode => code != null;
+
+  /// The offer's stored `donorCode` when it is a real PRC code, else null.
+  ///
+  /// Codes are assigned in sequence (DNR-0001, DNR-0002, ...; more digits
+  /// after DNR-9999) from counters/donorCodes by the admin portal, or by the
+  /// backend as a safety net. The app never makes one up: a locally
+  /// derived code could equal another donor's real code, so the requester
+  /// would see, and PRC would search for, the wrong donor.
+  static String? donorCode(dynamic stored) {
     final s = stored?.toString().trim().toUpperCase() ?? '';
-    if (RegExp(r'^DNR-[A-Z0-9]{2,8}$').hasMatch(s)) return s;
-    var h = 0;
-    for (final c in offerId.codeUnits) {
-      h = (h * 31 + c) % 10000;
-    }
-    return 'DNR-${h.toString().padLeft(4, '0')}';
+    return RegExp(r'^DNR-\d{4,}$').hasMatch(s) ? s : null;
   }
 }
 

@@ -49,7 +49,17 @@ final _offers = <String, List<MapEntry<String, Map<String, dynamic>>>>{
       'donorName': 'Maria Santos',
       'donorContact': '09171234567',
       'donorBloodType': 'A+',
+      'donorCode': 'DNR-0023',
       'approvedAt': _ts(16, 10),
+    }),
+  ],
+  // PRC confirmed the donor but no code has been stored yet.
+  'reqNoCode': [
+    MapEntry('offer3', {
+      'status': 'approved',
+      'donorId': 'secretUid2',
+      'donorBloodType': 'O+',
+      'approvedAt': _ts(16, 11),
     }),
   ],
   'reqPending': [
@@ -62,12 +72,27 @@ Stream<List<MapEntry<String, Map<String, dynamic>>>> _offersFor(String id) =>
     Stream.value(_offers[id] ?? const []);
 
 void main() {
-  test('donor code is stable, 4 digits and prefers a stored code', () {
-    final code = MatchedDonor.donorCode('offer1');
-    expect(code, matches(RegExp(r'^DNR-\d{4}$')));
-    expect(MatchedDonor.donorCode('offer1'), code);
-    expect(MatchedDonor.donorCode('offer1', 'dnr-0023'), 'DNR-0023');
-    expect(MatchedDonor.donorCode('offer1', 'Maria'), code);
+  test('donor code is only ever a stored PRC code, never made up', () {
+    expect(MatchedDonor.donorCode('DNR-0023'), 'DNR-0023');
+    expect(MatchedDonor.donorCode(' dnr-0023 '), 'DNR-0023');
+    // Sequence continues past DNR-9999.
+    expect(MatchedDonor.donorCode('DNR-10000'), 'DNR-10000');
+
+    // No code yet, or something that is not a PRC code: pending.
+    for (final stored in [null, '', 'Maria', 'DNR-12', 'DNR-AB12', 42]) {
+      expect(MatchedDonor.donorCode(stored), isNull, reason: '$stored');
+    }
+
+    final pending = MatchedDonor.fromOffer('offer3', {'status': 'approved'});
+    expect(pending.code, isNull);
+    expect(pending.hasCode, isFalse);
+    expect(pending.displayCode, MatchedDonor.pendingCodeLabel);
+
+    final assigned = MatchedDonor.fromOffer('offer1', {
+      'status': 'approved',
+      'donorCode': 'DNR-0023',
+    });
+    expect(assigned.displayCode, 'DNR-0023');
   });
 
   testWidgets('lists approved requests with their match state', (tester) async {
@@ -107,7 +132,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Donor Matched'), findsNWidgets(2)); // pill + step
-    expect(find.text(MatchedDonor.donorCode('offer1')), findsOneWidget);
+    expect(find.text('DNR-0023'), findsOneWidget);
+    expect(find.text(MatchedDonor.pendingCodeLabel), findsNothing);
     expect(find.text('Blood Type: A+'), findsOneWidget);
     expect(find.text('Confirmed'), findsOneWidget);
     expect(find.text('Request Approved'), findsOneWidget);
@@ -149,5 +175,30 @@ void main() {
     expect(find.text('Donation Completed'), findsNWidgets(2)); // pill + step
     expect(find.text('Pending'), findsNothing);
     expect(find.text('Nov 18, 2026 • 9:00 AM'), findsOneWidget);
+  });
+
+  testWidgets('confirmed donor without a stored code shows Code pending', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatchedDonorDetailScreen(
+          requestId: 'reqNoCode',
+          request: Stream.value(_requests.first.value),
+          offers: _offersFor('reqNoCode'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(MatchedDonor.pendingCodeLabel), findsOneWidget);
+    expect(
+      find.text('PRC will assign an anonymous donor code shortly.'),
+      findsOneWidget,
+    );
+    expect(find.text('Blood Type: O+'), findsOneWidget);
+    // No made-up DNR code anywhere on screen.
+    expect(find.textContaining('DNR-'), findsNothing);
+    expect(find.textContaining('secretUid'), findsNothing);
   });
 }

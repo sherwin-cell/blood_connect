@@ -330,13 +330,27 @@ class _DonorCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                donor.code,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  letterSpacing: 0.3,
-                ),
+                donor.displayCode,
+                style: donor.hasCode
+                    ? const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        letterSpacing: 0.3,
+                      )
+                    : TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey.shade600,
+                      ),
               ),
+              if (!donor.hasCode) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'PRC will assign an anonymous donor code shortly.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
               const SizedBox(height: 2),
               Text(
                 'Blood Type: ${donor.bloodType}',
