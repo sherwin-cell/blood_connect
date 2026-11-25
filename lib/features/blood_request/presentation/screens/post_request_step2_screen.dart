@@ -223,6 +223,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
                   children: [
                     // 1. Blood Type Needed
                     DropdownButtonFormField<String>(
+                      key: const ValueKey('bloodTypeField'),
                       initialValue: _selectedBloodType,
                       decoration: _inputDecoration(
                         'Blood Type Needed',
@@ -241,6 +242,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
 
                     // 2. Units Needed
                     DropdownButtonFormField<String>(
+                      key: const ValueKey('unitsField'),
                       initialValue: _selectedUnits,
                       decoration: _inputDecoration(
                         'Units Needed',
@@ -322,6 +324,7 @@ class _PostRequestStep2ScreenState extends State<PostRequestStep2Screen> {
 
                     // 6. Needed by date
                     InkWell(
+                      key: const ValueKey('neededByField'),
                       onTap: _pickNeededByDate,
                       borderRadius: BorderRadius.circular(8),
                       child: InputDecorator(
