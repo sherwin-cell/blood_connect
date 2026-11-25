@@ -15,25 +15,6 @@ class DonorRepositoryImpl {
   // Resolved lazily so screens can be built in tests without Firebase.
   FirebaseFirestore get _firestore => _db ?? FirebaseFirestore.instance;
 
-  /// Name the donor gave in their application (`fullName`).
-  static String donorName(Map<String, dynamic> donor) =>
-      (donor['fullName'] ?? donor['name'] ?? 'Donor').toString().trim();
-
-  /// Mobile number from the application (`mobileNo`; older records used
-  /// other names). Empty when none is on file.
-  static String donorContact(Map<String, dynamic> donor) {
-    for (final key in [
-      'mobileNo',
-      'phoneNumber',
-      'contactNumber',
-      'telephone',
-    ]) {
-      final value = donor[key]?.toString().trim() ?? '';
-      if (value.isNotEmpty) return value;
-    }
-    return '';
-  }
-
   // ================================================================
   // DONOR -> OPEN REQUESTS (anonymised summaries)
   // ================================================================
@@ -148,11 +129,13 @@ class DonorRepositoryImpl {
       );
     }
 
+    // No donor name or contact here: the requester can read their request's
+    // offers, and donors stay anonymous to requesters. PRC reads the
+    // donor's details from donors/{donorId} (firestore.rules refuses
+    // offers that carry them).
     await offersRef.add({
       'requestId': requestId,
       'donorId': donorId,
-      'donorName': donorName(donorData),
-      'donorContact': donorContact(donorData),
       'donorBloodType': donorBloodType,
       ...summary.offerFields(),
       'status': OfferStatus.pending,

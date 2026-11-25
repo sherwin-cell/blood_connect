@@ -111,7 +111,8 @@ async function main() {
         requestId,
         donorId: donor,
         status: "approved",
-        donorName: "Donor m-donor",
+        donorBloodType: "A+",
+        donorCode: "DNR-0001",
       });
       await setDoc(doc(db, "chats", matchChat), {
         chatId: matchChat,
@@ -189,6 +190,24 @@ async function main() {
     await test("Requester can read offers on their request",
       () => getDocs(collection(db(requester), "blood_requests", requestId, "offers")),
       true);
+
+    // ---------------------------------------------------------------
+    // Donor anonymity: offers are readable by the requester, so they
+    // must never carry the donor's name or contact (R1).
+    // ---------------------------------------------------------------
+    await seed();
+    await test("A donor cannot put their name on a new offer",
+      () => addDoc(collection(db(donor), "blood_requests", requestId, "offers"),
+        { ...offer(donor, "A+"), donorName: "Maria Santos" }), false);
+    await test("A donor cannot put their contact number on a new offer",
+      () => addDoc(collection(db(donor), "blood_requests", requestId, "offers"),
+        { ...offer(donor, "A+"), donorContact: "09171234567" }), false);
+    await test("A donor cannot put their email on a new offer",
+      () => addDoc(collection(db(donor), "blood_requests", requestId, "offers"),
+        { ...offer(donor, "A+"), donorEmail: "maria@example.test" }), false);
+    await test("A donor cannot add their name to an existing offer",
+      () => updateDoc(doc(db(donor), "blood_requests", requestId, "offers", offerId),
+        { donorName: "Maria Santos" }), false);
 
     // ---------------------------------------------------------------
     // Donor codes (anonymised DNR-xxxx)

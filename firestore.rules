@@ -126,6 +126,21 @@ service cloud.firestore {
       ];
     }
 
+    // Donor identity fields that must never be stored on an offer: the
+    // requester can read their request's offers and donors stay anonymous
+    // to requesters (they see only the DNR code).
+    function offerIdentityFields() {
+      return [
+        'donorName',
+        'donorFullName',
+        'donorContact',
+        'donorPhone',
+        'donorMobile',
+        'donorEmail',
+        'donorPhotoUrl'
+      ];
+    }
+
     // A newly submitted donor application: always pending, never
     // pre-approved, activated, screened, or available for matching.
     function validNewDonorApplication(donorId) {
@@ -497,6 +512,9 @@ service cloud.firestore {
           && request.resource.data.get('status', 'pending') == 'pending'
           && request.resource.data.get('requestId', requestId) == requestId
           // PRC assigns the anonymised DNR code when it confirms the offer.
+          // The requester can read this offer, so it must not identify the
+          // donor: PRC reads name and contact from donors/{donorId}.
+          && !request.resource.data.keys().hasAny(offerIdentityFields())
           && !request.resource.data.keys().hasAny(['donorCode'])
           && get(
             /databases/$(database)/documents/blood_requests/$(requestId)
@@ -536,6 +554,11 @@ service cloud.firestore {
             .diff(resource.data)
             .affectedKeys()
             .hasAny(['status', 'donorCode'])
+          // Never add the donor's identity: the requester can read offers.
+          && !request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasAny(offerIdentityFields())
         );
 
         allow delete: if isAdmin() || (
@@ -552,8 +575,8 @@ service cloud.firestore {
     match /donors/{donorId} {
 
       // Applications hold contact details, ID photos and the health
-      // questionnaire: only the donor and PRC may read them. Requesters see
-      // a donor's name and contact on the offer, once PRC confirms it.
+      // questionnaire: only the donor and PRC may read them. Requesters
+      // never see a donor's name or contact, only the offer's DNR code.
       allow read: if isAdmin() || isOwner(donorId);
 
       // Users may submit their own applications.
