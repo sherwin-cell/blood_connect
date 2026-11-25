@@ -11,6 +11,7 @@ import '../../../blood_request/presentation/screens/my_request_details_screen.da
 import '../../../blood_request/presentation/widgets/request_progress_widgets.dart';
 import '../../../donor/presentation/screens/apply_donor_welcomescreen.dart';
 import '../../../requests/presentation/request_rejection_screen.dart';
+import '../../../verification/presentation/verification_gate.dart';
 import '../widgets/my_offers_section.dart';
 
 enum ActivitySection { bloodRequest, donation }
@@ -403,6 +404,7 @@ class _DonationActivityState extends State<_DonationActivity> {
                         DonorStatus.pending)
                     .toLowerCase();
             return _DonorApplicationTile(
+              userId: widget.userId,
               status: status,
               rejectionReason:
                   data['rejectionReason'] as String? ??
@@ -419,11 +421,13 @@ class _DonationActivityState extends State<_DonationActivity> {
 
 class _DonorApplicationTile extends StatelessWidget {
   const _DonorApplicationTile({
+    required this.userId,
     required this.status,
     required this.rejectionReason,
     required this.canResubmit,
   });
 
+  final String userId;
   final String status;
   final String? rejectionReason;
   final bool canResubmit;
@@ -458,11 +462,15 @@ class _DonorApplicationTile extends StatelessWidget {
                       reason:
                           rejectionReason ??
                           'No specific notes provided by the administrator.',
+                      // Same identity check as Home, before the form. The
+                      // new application replaces donors/{uid} and the old
+                      // one moves to application_history, as before.
                       onResubmit: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ApplyDonorWelcomeScreen(),
-                          ),
+                        VerificationGate.open(
+                          context,
+                          userId: userId,
+                          destination: const ApplyDonorWelcomeScreen(),
+                          actionName: 'apply as a blood donor',
                         );
                       },
                       canResubmit: canResubmit,

@@ -15,6 +15,7 @@ const {
   doc,
   setDoc,
   updateDoc,
+  deleteDoc,
   getDoc,
   getDocs,
   collection,
@@ -72,12 +73,15 @@ async function main() {
 
       await setDoc(doc(db, "users", adminId), { uid: adminId, role: "admin" });
 
+      // Activated donors always carry the next eligible date PRC set at
+      // activation (YYYY-MM-DD); offers require it (R4, fail closed).
       await setDoc(doc(db, "donors", donorId), {
         userId: donorId,
         donorStatus: "approved",
         isDonor: true,
         isAvailableForDonation: true,
         bloodType: "O+",
+        nextEligibleDonationDate: "2025-01-15",
       });
 
       await setDoc(doc(db, "donors", unavailableDonorId), {
@@ -86,6 +90,7 @@ async function main() {
         isDonor: true,
         isAvailableForDonation: false,
         bloodType: "O+",
+        nextEligibleDonationDate: "2025-01-15",
       });
 
       await setDoc(doc(db, "blood_requests", "open-req"), {
@@ -126,6 +131,47 @@ async function main() {
         donorId,
         status: "donated",
       });
+
+      // The requester finished identity verification (R5).
+      await setDoc(doc(db, "users", requesterId), {
+        uid: requesterId,
+        role: "user",
+        faceVerified: true,
+      });
+      await setDoc(doc(db, "id_verifications", requesterId), idOnFile(requesterId));
+    });
+  }
+
+  // id_verifications/{uid} as the app saves it: both private ID photos.
+  function idOnFile(uid) {
+    return {
+      userId: uid,
+      status: "submitted",
+      idType: "PhilSys National ID",
+      frontIdImageUrl: `secure://image/blood_connect_private/${uid}/id_front/front.jpg`,
+      backIdImageUrl: `secure://image/blood_connect_private/${uid}/id_back/back.jpg`,
+    };
+  }
+
+  // Changes the seeded requester's verification before a test.
+  async function setRequesterVerification({ faceVerified = true, idPhotos = true } = {}) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "users", requesterId), {
+        uid: requesterId,
+        role: "user",
+        faceVerified,
+      });
+      if (idPhotos === true) {
+        await setDoc(doc(db, "id_verifications", requesterId), idOnFile(requesterId));
+      } else if (idPhotos === "front-only") {
+        await setDoc(doc(db, "id_verifications", requesterId), {
+          ...idOnFile(requesterId),
+          backIdImageUrl: "",
+        });
+      } else {
+        await deleteDoc(doc(db, "id_verifications", requesterId));
+      }
     });
   }
 
@@ -190,6 +236,43 @@ async function main() {
       "Requester can create a request for a specific blood type",
       () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), newRequest("AB-")),
       true
+    );
+
+    // R5: only users who finished identity verification may request blood.
+    await seed();
+    await setRequesterVerification({ faceVerified: false });
+    await test(
+      "Requester whose face is not verified cannot create a request",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), newRequest("AB-")),
+      false
+    );
+
+    await seed();
+    await setRequesterVerification({ idPhotos: false });
+    await test(
+      "Requester without an ID on file cannot create a request",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), newRequest("AB-")),
+      false
+    );
+
+    await seed();
+    await setRequesterVerification({ idPhotos: "front-only" });
+    await test(
+      "Requester with only the front ID photo cannot create a request",
+      () => setDoc(doc(db(requesterId), "blood_requests", "new-req"), newRequest("AB-")),
+      false
+    );
+
+    await seed();
+    await test(
+      "A user with no profile cannot create a request",
+      () => setDoc(doc(db(strangerId), "blood_requests", "new-req"), {
+        userId: strangerId,
+        requesterId: strangerId,
+        bloodType: "AB-",
+        status: "pending",
+      }),
+      false
     );
 
     for (const bloodType of ["Any Type", "Any", "", "o+"]) {

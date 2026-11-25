@@ -1,11 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../verification/domain/entities/account_verification_stage.dart';
-import '../../../verification/domain/repositories/i_verification_repository.dart';
 import '../../../profile/domain/user_profile_model.dart';
 import '../../../blood_request/presentation/screens/post_blood_request_welcome_screen.dart';
 import '../../../donor/presentation/screens/compatible_requests_screen.dart';
@@ -15,8 +12,7 @@ import '../../../chat/presentation/screens/prc_chat_room_screen.dart';
 import '../../../announcements/presentation/screens/announcements_screen.dart';
 import '../../../help/presentation/help_guides_screen.dart';
 import '../../../referral/presentation/refer_friend_screen.dart';
-import '../../../verification/presentation/id_verification_flow.dart';
-import '../../../verification/presentation/identity_verification_flow.dart';
+import '../../../verification/presentation/verification_gate.dart';
 import '../widgets/member_card.dart';
 import '../../../../core/constants/statuses.dart';
 
@@ -29,377 +25,26 @@ class HomeTabView extends StatelessWidget {
   // VERIFICATION GATE
   // ============================================================
 
+  /// Same check as "Submit a New Request" and "Resubmit application":
+  /// see [VerificationGate].
   Future<void> _checkVerificationAndNavigate(
     BuildContext context, {
     required Widget destinationScreen,
     required String actionName,
   }) async {
-    debugPrint('');
-    debugPrint('====================================================');
-    debugPrint('========== VERIFICATION CHECK STARTED =============');
-    debugPrint('====================================================');
-    debugPrint('Action: $actionName');
-    debugPrint('Home context mounted: ${context.mounted}');
-
     final user = FirebaseAuth.instance.currentUser;
-
-    debugPrint('Firebase user exists: ${user != null}');
-    debugPrint('Firebase user UID: ${user?.uid}');
-
     if (user == null) {
-      debugPrint('STOP: No authenticated Firebase user.');
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please log in to continue.')),
       );
-
       return;
     }
-
-    // ============================================================
-    // 1. FACE VERIFICATION
-    // ============================================================
-
-    final bool isFaceVerified = profile?.faceVerified ?? false;
-
-    debugPrint('');
-    debugPrint('---------- FACE VERIFICATION CHECK ----------');
-    debugPrint('Profile exists: ${profile != null}');
-    debugPrint('Profile faceVerified: ${profile?.faceVerified}');
-    debugPrint('isFaceVerified: $isFaceVerified');
-
-    if (!isFaceVerified) {
-      // ID on file decides where the button goes: ID upload then selfie
-      // ("Not Verified"), or straight to the selfie ("Face Not Verified").
-      final hasSubmittedId = await IdentityVerificationFlow.hasIdOnFile(
-        context.read<IVerificationRepository>(),
-        user.uid,
-      );
-      if (!context.mounted) return;
-
-      final stage = AccountVerificationStage.of(
-        faceVerified: false,
-        hasSubmittedId: hasSubmittedId,
-      );
-      debugPrint('Verification stage: ${stage.name}');
-
-      _showGateDialog(
-        context,
-        title: stage.label,
-        message: stage.gateMessage(
-          actionName,
-          lastCheckFailed: profile?.faceVerificationFailed ?? false,
-        ),
-        buttonText: stage.actionLabel,
-        onPressed: () async {
-          if (!context.mounted) return;
-          await IdentityVerificationFlow.startForStage(context, stage);
-        },
-      );
-
-      return;
-    }
-
-    debugPrint('FACE VERIFICATION PASSED.');
-
-    // ============================================================
-    // 2. CHECK ID SUBMISSION
-    // ============================================================
-
-    debugPrint('');
-    debugPrint('---------- ID SUBMISSION CHECK ----------');
-    debugPrint('Checking Firestore document:');
-    debugPrint('id_verifications/${user.uid}');
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        debugPrint('Loading dialog CREATED.');
-
-        return const Center(child: CircularProgressIndicator());
-      },
-    );
-
-    bool hasSubmittedId = false;
-
-    try {
-      debugPrint('Reading Firestore ID verification document...');
-
-      final docSnap = await FirebaseFirestore.instance
-          .collection('id_verifications')
-          .doc(user.uid)
-          .get(const GetOptions(source: Source.serverAndCache));
-
-      debugPrint('Firestore read COMPLETED.');
-      debugPrint('Document exists: ${docSnap.exists}');
-      debugPrint('Document data: ${docSnap.data()}');
-
-      hasSubmittedId = docSnap.exists && docSnap.data() != null;
-
-      debugPrint('hasSubmittedId: $hasSubmittedId');
-    } catch (e, stackTrace) {
-      debugPrint('ERROR reading ID verification document.');
-      debugPrint('Error: $e');
-      debugPrint('StackTrace: $stackTrace');
-
-      hasSubmittedId = false;
-    }
-
-    // ============================================================
-    // DISMISS LOADING DIALOG
-    // ============================================================
-
-    debugPrint('');
-    debugPrint('---------- DISMISSING LOADING DIALOG ----------');
-
-    if (!context.mounted) {
-      debugPrint('STOP: Home context is no longer mounted.');
-
-      return;
-    }
-
-    Navigator.of(context).pop();
-
-    debugPrint('Loading dialog dismissed.');
-
-    // ============================================================
-    // 3. ID DOES NOT EXIST
-    // ============================================================
-
-    if (!hasSubmittedId) {
-      debugPrint('');
-      debugPrint('========== ID SUBMISSION DOES NOT EXIST ==========');
-
-      debugPrint('Showing ID Submission Required dialog.');
-
-      _showGateDialog(
-        context,
-        title: 'ID Submission Required',
-        message:
-            'You must submit a valid government ID before you can $actionName.',
-        buttonText: 'Submit Valid ID',
-        onPressed: () async {
-          debugPrint('');
-          debugPrint('====================================================');
-          debugPrint('========== HOME: ID BUTTON ACTION =================');
-          debugPrint('====================================================');
-
-          debugPrint(
-            'Home context mounted BEFORE start: '
-            '${context.mounted}',
-          );
-
-          if (!context.mounted) {
-            debugPrint('STOP: Home context is no longer mounted.');
-
-            return;
-          }
-
-          try {
-            debugPrint('HOME: Calling IdVerificationFlow.start(context)...');
-
-            final result = await IdVerificationFlow.start(context);
-
-            debugPrint('');
-            debugPrint('====================================================');
-            debugPrint('========== HOME: ID VERIFICATION RETURNED =========');
-            debugPrint('====================================================');
-
-            debugPrint('HOME: Result = $result');
-            debugPrint('HOME: Result is null = ${result == null}');
-
-            debugPrint(
-              'HOME: Context mounted after return = '
-              '${context.mounted}',
-            );
-
-            if (result != null) {
-              debugPrint('HOME: ID verification returned data.');
-
-              debugPrint('ID Type: ${result.idType}');
-
-              debugPrint('Front ID: ${result.frontIdImage}');
-
-              debugPrint('Back ID: ${result.backIdImage}');
-
-              debugPrint(
-                'Validation Status: '
-                '${result.validationStatus}',
-              );
-
-              debugPrint('Submitted At: ${result.submittedAt}');
-            } else {
-              debugPrint('HOME: ID verification returned NULL.');
-            }
-
-            // ==================================================
-            // IMPORTANT:
-            //
-            // Do NOT automatically navigate to the destination.
-            //
-            // ID submission still requires PRC/admin approval.
-            // ==================================================
-          } catch (e, stackTrace) {
-            debugPrint('');
-            debugPrint('====================================================');
-            debugPrint('========== HOME: ID VERIFICATION ERROR ============');
-            debugPrint('====================================================');
-
-            debugPrint('Error: $e');
-            debugPrint('StackTrace: $stackTrace');
-          }
-        },
-      );
-
-      return;
-    }
-
-    // ============================================================
-    // 4. ALL CHECKS PASSED
-    // ============================================================
-
-    debugPrint('');
-    debugPrint('====================================================');
-    debugPrint('========== ALL VERIFICATION CHECKS PASSED =========');
-    debugPrint('====================================================');
-
-    if (!context.mounted) {
-      debugPrint('STOP: Home context no longer mounted.');
-
-      return;
-    }
-
-    debugPrint('Navigating to destination screen...');
-
-    debugPrint('Destination: $destinationScreen');
-
-    await Navigator.of(
+    await VerificationGate.open(
       context,
-    ).push(MaterialPageRoute(builder: (_) => destinationScreen));
-
-    debugPrint('Destination navigation returned.');
-  }
-
-  // ============================================================
-  // GATE DIALOG
-  // ============================================================
-
-  void _showGateDialog(
-    BuildContext homeContext, {
-    required String title,
-    required String message,
-    required String buttonText,
-    required Future<void> Function() onPressed,
-  }) {
-    debugPrint('');
-    debugPrint('========== SHOWING GATE DIALOG ==========');
-
-    debugPrint('Title: $title');
-    debugPrint('Button: $buttonText');
-
-    showDialog(
-      context: homeContext,
-      builder: (dialogContext) {
-        debugPrint('');
-        debugPrint('========== DIALOG BUILDER CREATED ==========');
-
-        debugPrint(
-          'Dialog context mounted: '
-          '${dialogContext.mounted}',
-        );
-
-        debugPrint(
-          'Home context mounted: '
-          '${homeContext.mounted}',
-        );
-
-        return AlertDialog(
-          title: Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.primaryRed,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Text(message, style: const TextStyle(fontSize: 13)),
-          actions: [
-            TextButton(
-              onPressed: () {
-                debugPrint('');
-                debugPrint('========== DIALOG CANCEL PRESSED ==========');
-
-                Navigator.of(dialogContext).pop();
-
-                debugPrint('Dialog closed.');
-              },
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                debugPrint('');
-                debugPrint(
-                  '====================================================',
-                );
-                debugPrint(
-                  '========== GATE DIALOG BUTTON PRESSED =============',
-                );
-                debugPrint(
-                  '====================================================',
-                );
-
-                debugPrint('Button: $buttonText');
-
-                Navigator.of(dialogContext).pop();
-
-                debugPrint('Gate dialog close command completed.');
-
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  debugPrint('');
-                  debugPrint(
-                    '====================================================',
-                  );
-                  debugPrint(
-                    '========== AFTER DIALOG CLOSED ====================',
-                  );
-                  debugPrint(
-                    '====================================================',
-                  );
-
-                  if (!homeContext.mounted) {
-                    debugPrint('STOP: Home context is no longer mounted.');
-
-                    return;
-                  }
-
-                  try {
-                    await onPressed();
-
-                    debugPrint(
-                      '========== GATE ACTION COMPLETED ==================',
-                    );
-                  } catch (e, stackTrace) {
-                    debugPrint(
-                      '========== GATE ACTION ERROR ======================',
-                    );
-
-                    debugPrint('Error: $e');
-
-                    debugPrint('StackTrace: $stackTrace');
-                  }
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryRed,
-              ),
-              child: Text(
-                buttonText,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
+      userId: user.uid,
+      destination: destinationScreen,
+      actionName: actionName,
+      profile: profile,
     );
   }
 
@@ -900,9 +545,9 @@ class HomeTabView extends StatelessWidget {
         _buildInfoServiceItem(
           Icons.groups_outlined,
           'Refer a Friend',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ReferFriendScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ReferFriendScreen())),
         ),
         const SizedBox(width: 8),
         _buildInfoServiceItem(

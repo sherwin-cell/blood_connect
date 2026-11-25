@@ -54,13 +54,52 @@ service cloud.firestore {
     }
 
     // An approved donor whom PRC marked available for donation.
+    // Approved and activated by PRC, marked available, and on or after a
+    // valid nextEligibleDonationDate. Stricter than DonorEligibility in the
+    // app and is_donor_eligible in blood_connect_backend, which treat a
+    // missing date as eligible.
     function isEligibleDonor() {
       let donorPath =
         /databases/$(database)/documents/donors/$(request.auth.uid);
       return isAuthenticated()
         && exists(donorPath)
         && get(donorPath).data.get('donorStatus', '') == 'approved'
-        && get(donorPath).data.get('isAvailableForDonation', false) == true;
+        && get(donorPath).data.get('isDonor', false) == true
+        && get(donorPath).data.get('isAvailableForDonation', false) == true
+        && nextEligibleDateReached(get(donorPath).data);
+    }
+
+    // nextEligibleDonationDate is stored only as a YYYY-MM-DD string in
+    // Philippine time (UTC+8): the admin portal writes it when PRC activates
+    // a donor (the only way isDonor becomes true) and after each donation.
+    // Fails closed: a missing, null, malformed or non-string value (e.g. a
+    // Timestamp or number), or an impossible date such as 2026-02-31 (which
+    // makes timestamp.date() fail), denies the offer.
+    function nextEligibleDateReached(donor) {
+      let next = donor.get('nextEligibleDonationDate', null);
+      return next is string
+        && next.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && request.time + duration.value(8, 'h') >= timestamp.date(
+             int(next[0:4]), int(next[5:7]), int(next[8:10]));
+    }
+
+    // The signed-in user finished identity verification, as the app checks
+    // before Apply as Blood Requester / Blood Donor: a valid ID on file
+    // (id_verifications/{uid} with both photos) and a face match by the
+    // backend or a PRC approval (users/{uid}.faceVerified).
+    function hasVerifiedIdentity() {
+      let userPath =
+        /databases/$(database)/documents/users/$(request.auth.uid);
+      let idPath =
+        /databases/$(database)/documents/id_verifications/$(request.auth.uid);
+      return isAuthenticated()
+        && exists(userPath)
+        && get(userPath).data.get('faceVerified', false) == true
+        && exists(idPath)
+        && get(idPath).data.get('frontIdImageUrl', '') is string
+        && get(idPath).data.get('frontIdImageUrl', '') != ''
+        && get(idPath).data.get('backIdImageUrl', '') is string
+        && get(idPath).data.get('backIdImageUrl', '') != '';
     }
 
     function isAdmin() {
@@ -153,6 +192,7 @@ service cloud.firestore {
     // pre-approved, activated, screened, or available for matching.
     function validNewDonorApplication(donorId) {
       return isOwner(donorId)
+        && hasVerifiedIdentity()
         && request.resource.data.get('userId', donorId) == donorId
         && request.resource.data.get('donorStatus', 'pending')
            in ['pending', 'unverified', null]
@@ -405,8 +445,10 @@ service cloud.firestore {
       // and PRC may read them. Donors read request_summaries instead.
       allow read: if isAdmin() || isRequestOwner(resource.data);
 
-      // Supports the existing requester ownership field.
+      // Supports the existing requester ownership field. Only users who
+      // finished identity verification may request blood.
       allow create: if isAuthenticated()
+        && hasVerifiedIdentity()
         && (
           request.resource.data.get('userId', '') == request.auth.uid
           ||

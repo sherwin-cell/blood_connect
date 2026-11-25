@@ -35,6 +35,8 @@ async function main() {
   const rejectedId = "test-donor-rejected-001";
   const allowedId = "test-donor-allowed-001";
   const newApplicantId = "test-donor-new-001";
+  const faceUnverifiedId = "test-donor-face-unverified-001";
+  const noIdApplicantId = "test-donor-no-id-001";
 
   // Same shape as the app's donor application (FirestoreService
   // _submitDonorApplication): a full replacement, always pending.
@@ -99,6 +101,31 @@ async function main() {
         collectionStatus: "completed",
         donationAvailabilityStatus: "medical_hold",
         nextEligibleDonationDate: "2027-01-22",
+      });
+
+      // Identity verification (R5): face matched and an ID on file.
+      const idOnFile = (uid) => ({
+        userId: uid,
+        status: "submitted",
+        frontIdImageUrl: `secure://image/blood_connect_private/${uid}/id_front/front.jpg`,
+        backIdImageUrl: `secure://image/blood_connect_private/${uid}/id_back/back.jpg`,
+      });
+      for (const uid of [newApplicantId, allowedId, rejectedId]) {
+        await setDoc(doc(db, "users", uid), { uid, role: "user", faceVerified: true });
+        await setDoc(doc(db, "id_verifications", uid), idOnFile(uid));
+      }
+      // ID on file, but the face check has not passed.
+      await setDoc(doc(db, "users", faceUnverifiedId), {
+        uid: faceUnverifiedId,
+        role: "user",
+        faceVerified: false,
+      });
+      await setDoc(doc(db, "id_verifications", faceUnverifiedId), idOnFile(faceUnverifiedId));
+      // Face verified, but no ID on file.
+      await setDoc(doc(db, "users", noIdApplicantId), {
+        uid: noIdApplicantId,
+        role: "user",
+        faceVerified: true,
       });
 
       // Rejected; PRC did not allow reapplication.
@@ -287,6 +314,26 @@ async function main() {
         application(allowedId, "app-allowed-2", { bloodType: "AB-" })
       ),
       true
+    );
+
+    console.log("\n--- IDENTITY VERIFICATION (R5) ---\n");
+
+    await test(
+      "Applicant whose face is not verified cannot apply as a donor",
+      () => setDoc(
+        doc(dbOf(faceUnverifiedId), "donors", faceUnverifiedId),
+        application(faceUnverifiedId, "app-face-1")
+      ),
+      false
+    );
+
+    await test(
+      "Applicant without an ID on file cannot apply as a donor",
+      () => setDoc(
+        doc(dbOf(noIdApplicantId), "donors", noIdApplicantId),
+        application(noIdApplicantId, "app-noid-1")
+      ),
+      false
     );
 
     await test(

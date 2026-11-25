@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/statuses.dart';
 import '../../../donor/presentation/screens/matched_donor_detail_screen.dart';
+import '../../../verification/presentation/verification_gate.dart';
 import '../../data/blood_request_repository.dart';
 import '../../domain/request_progress.dart';
 import '../widgets/request_progress_widgets.dart';
@@ -180,12 +182,17 @@ class _MyRequestDetailsScreenState extends State<MyRequestDetailsScreen> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const PostBloodRequestWelcomeScreen(),
-                          ),
-                        ),
+                        // Same identity check as Home, before the form.
+                        onPressed: () {
+                          final uid = FirebaseAuth.instance.currentUser?.uid;
+                          if (uid == null) return;
+                          VerificationGate.open(
+                            context,
+                            userId: uid,
+                            destination: const PostBloodRequestWelcomeScreen(),
+                            actionName: 'apply for a blood request',
+                          );
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: requestRed,
                           foregroundColor: Colors.white,

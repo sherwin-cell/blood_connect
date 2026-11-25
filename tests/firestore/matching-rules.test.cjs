@@ -29,6 +29,8 @@ const {
   query,
   where,
   serverTimestamp,
+  deleteField,
+  Timestamp,
 } = require("firebase/firestore");
 
 const PROJECT_ID = "blood-connect-12ac2";
@@ -75,6 +77,8 @@ async function main() {
     donorStatus: "approved",
     isDonor: true,
     isAvailableForDonation: true,
+    // Set by PRC at activation (always present on activated donors).
+    nextEligibleDonationDate: "2025-01-15",
     fullName: `Donor ${uid}`,
     mobileNo: "09170000000",
     eligibilityAnswers: { 1: false },
@@ -178,6 +182,75 @@ async function main() {
     await test("Matching approved donor can offer",
       () => addDoc(collection(db(donor), "blood_requests", requestId, "offers"),
         offer(donor, "A+")), true);
+    // ---------------------------------------------------------------
+    // Donor eligibility on offers (R4): same test as the app's
+    // DonorEligibility and the backend's is_donor_eligible.
+    // ---------------------------------------------------------------
+    const setDonor = (fields) =>
+      testEnv.withSecurityRulesDisabled((context) =>
+        updateDoc(doc(context.firestore(), "donors", donor), fields));
+    // YYYY-MM-DD in Philippine time (UTC+8), offset by whole days.
+    const phDate = (days = 0) =>
+      new Date(Date.now() + 8 * 3600 * 1000 + days * 86400 * 1000)
+        .toISOString().slice(0, 10);
+    const tryOffer = () =>
+      addDoc(collection(db(donor), "blood_requests", requestId, "offers"),
+        offer(donor, "A+"));
+
+    await seed();
+    await setDonor({ isDonor: false });
+    await test("Approved donor PRC has not activated yet cannot offer", tryOffer, false);
+
+    await seed();
+    await setDonor({ isAvailableForDonation: false });
+    await test("Donor marked unavailable cannot offer", tryOffer, false);
+
+    await seed();
+    await setDonor({ nextEligibleDonationDate: phDate(1) });
+    await test("Donor cannot offer before their next eligible date", tryOffer, false);
+
+    await seed();
+    await setDonor({ nextEligibleDonationDate: "2099-01-01" });
+    await test("Donor cannot offer with a far-future next eligible date", tryOffer, false);
+
+    await seed();
+    await setDonor({ nextEligibleDonationDate: phDate(0) });
+    await test("Donor can offer on their next eligible date (PH time)", tryOffer, true);
+
+    await seed();
+    await setDonor({ nextEligibleDonationDate: "2020-01-15" });
+    await test("Donor can offer after their next eligible date", tryOffer, true);
+
+    // Fail closed: anything but a real, reached YYYY-MM-DD date denies.
+    await seed();
+    await setDonor({ nextEligibleDonationDate: deleteField() });
+    await test("Donor with no next eligible date cannot offer", tryOffer, false);
+
+    await seed();
+    await setDonor({ nextEligibleDonationDate: null });
+    await test("Donor with a null next eligible date cannot offer", tryOffer, false);
+
+    for (const malformed of ["not-a-date", "", "2025-1-15", "01/15/2025",
+                             "2025-13-01", "2025-00-10", "2025-02-31", " 2025-01-15"]) {
+      await seed();
+      await setDonor({ nextEligibleDonationDate: malformed });
+      await test(`Donor with malformed next eligible date ${JSON.stringify(malformed)} cannot offer`,
+        tryOffer, false);
+    }
+
+    const unsupported = [
+      ["a Timestamp", Timestamp.fromDate(new Date("2025-01-15T00:00:00Z"))],
+      ["a number", 20250115],
+      ["a boolean", true],
+      ["a map", { year: 2025, month: 1, day: 15 }],
+      ["a list", ["2025-01-15"]],
+    ];
+    for (const [label, value] of unsupported) {
+      await seed();
+      await setDonor({ nextEligibleDonationDate: value });
+      await test(`Donor whose next eligible date is ${label} cannot offer`, tryOffer, false);
+    }
+
     await seed();
     await test("Donor with another blood type cannot offer",
       () => addDoc(collection(db(otherDonor), "blood_requests", requestId, "offers"),
