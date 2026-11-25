@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/statuses.dart';
+import '../../../donor/presentation/screens/matched_donor_detail_screen.dart';
 import '../../data/blood_request_repository.dart';
 import '../../domain/request_progress.dart';
 import '../widgets/request_progress_widgets.dart';
 import 'cancel_blood_request_screen.dart';
 import 'post_blood_request_welcome_screen.dart';
-import 'request_offers_screen.dart';
 
 /// Requester's view of one of their blood requests (Activity > View Request
 /// Details).
@@ -160,10 +160,8 @@ class _MyRequestDetailsScreenState extends State<MyRequestDetailsScreen> {
                   offers: _offers,
                   onOpen: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => RequestOffersScreen(
-                        requestId: widget.requestId,
-                        title: 'Donor Offers · ${p.reference}',
-                      ),
+                      builder: (_) =>
+                          MatchedDonorDetailScreen(requestId: widget.requestId),
                     ),
                   ),
                 ),
@@ -319,11 +317,11 @@ class _OffersCard extends StatelessWidget {
               color: requestRed,
             ),
             title: const Text(
-              'Donor Offers',
+              'Matched Donor',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '$summary\nPRC reviews each offer and confirms the donor.',
+              '$summary\nPRC confirms the donor; you see an anonymised code.',
             ),
             isThreeLine: true,
             trailing: const Icon(Icons.chevron_right),

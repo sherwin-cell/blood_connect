@@ -3,8 +3,10 @@
 // - blood_requests and donors are readable only by their owner and PRC;
 //   donors read the anonymised request_summaries instead.
 // - Offers: eligible donor, exact blood type, never on your own request.
-// - Chats: only participants (and PRC) read them; donor-match chats are
-//   created by the backend only and their participants cannot change.
+// - Donor anonymity: PRC alone sets an offer's donorCode and the request's
+//   matchedDonorCodes; the donor-code counter is PRC-only.
+// - Chats: only participants (and PRC) read support chats; retired
+//   donor-match chats are PRC-only: users can neither read nor write them.
 //
 // Run against the Firestore emulator (requires Java 21):
 //   firebase emulators:exec --only firestore "node tests/firestore/matching-rules.test.cjs"
@@ -189,34 +191,70 @@ async function main() {
       true);
 
     // ---------------------------------------------------------------
+    // Donor codes (anonymised DNR-xxxx)
+    // ---------------------------------------------------------------
+    await seed();
+    await test("A donor cannot preset a donor code on a new offer",
+      () => addDoc(collection(db(donor), "blood_requests", requestId, "offers"),
+        { ...offer(donor, "A+"), donorCode: "DNR-0001" }), false);
+    await test("A donor cannot change their offer's donor code",
+      () => updateDoc(doc(db(donor), "blood_requests", requestId, "offers", offerId),
+        { donorCode: "DNR-9999" }), false);
+    await test("Requester cannot set matchedDonorCodes",
+      () => updateDoc(doc(db(requester), "blood_requests", requestId),
+        { matchedDonorCodes: ["DNR-0001"] }), false);
+    await test("Users cannot read the donor-code counter",
+      () => getDoc(doc(db(requester), "counters", "donorCodes")), false);
+    await test("Users cannot advance the donor-code counter",
+      () => setDoc(doc(db(donor), "counters", "donorCodes"), { last: 5 }), false);
+    await test("Admin assigns a donor code",
+      () => updateDoc(doc(db(admin), "blood_requests", requestId, "offers", offerId),
+        { donorCode: "DNR-0001" }), true);
+    await test("Admin lists the code on the request",
+      () => updateDoc(doc(db(admin), "blood_requests", requestId),
+        { matchedDonorCodes: ["DNR-0001"] }), true);
+    await test("Admin advances the donor-code counter",
+      () => setDoc(doc(db(admin), "counters", "donorCodes"), { last: 1 }), true);
+
+    // ---------------------------------------------------------------
     // Chats
     // ---------------------------------------------------------------
     await seed();
-    await test("Participants read the match chat",
-      () => getDoc(doc(db(donor), "chats", matchChat)), true);
+    await test("Participants can no longer read a retired match chat",
+      () => getDoc(doc(db(donor), "chats", matchChat)), false);
     await test("A stranger cannot read the match chat",
       () => getDoc(doc(db(stranger), "chats", matchChat)), false);
     await test("A stranger cannot read someone's PRC support chat",
       () => getDoc(doc(db(stranger), "chats", `${requester}_prc_support`)), false);
+    await test("Owner reads their PRC support chat",
+      () => getDoc(doc(db(requester), "chats", `${requester}_prc_support`)), true);
     await test("A stranger cannot read match chat messages",
       () => getDocs(collection(db(stranger), "chats", matchChat, "messages")), false);
-    await test("Participants read match chat messages",
-      () => getDocs(collection(db(requester), "chats", matchChat, "messages")), true);
-    await test("Participant sends a message as themselves",
+    await test("Participants can no longer read match chat messages",
+      () => getDocs(collection(db(requester), "chats", matchChat, "messages")), false);
+    await test("Participants can no longer message in a match chat",
       () => addDoc(collection(db(requester), "chats", matchChat, "messages"),
-        { senderId: requester, message: "Thanks!", createdAt: serverTimestamp() }), true);
-    await test("Participant cannot send as the other person",
-      () => addDoc(collection(db(requester), "chats", matchChat, "messages"),
-        { senderId: donor, message: "fake", createdAt: serverTimestamp() }), false);
-    await test("Participant updates the chat preview",
+        { senderId: requester, message: "Thanks!", createdAt: serverTimestamp() }), false);
+    await test("Participant cannot update a match chat",
       () => updateDoc(doc(db(requester), "chats", matchChat),
-        { lastMessage: "Thanks!", lastSenderId: requester }), true);
+        { lastMessage: "Thanks!", lastSenderId: requester }), false);
     await test("Participants cannot be changed",
       () => updateDoc(doc(db(requester), "chats", matchChat),
         { participants: [requester, stranger] }), false);
     await test("A match chat cannot be flagged as PRC support",
       () => updateDoc(doc(db(donor), "chats", matchChat), { isPrcSupport: true }),
       false);
+    await test("Owner messages PRC in their support chat",
+      () => addDoc(collection(db(requester), "chats", `${requester}_prc_support`, "messages"),
+        { senderId: requester, message: "Hello PRC", createdAt: serverTimestamp() }), true);
+    await test("Owner cannot send as someone else in their support chat",
+      () => addDoc(collection(db(requester), "chats", `${requester}_prc_support`, "messages"),
+        { senderId: donor, message: "fake", createdAt: serverTimestamp() }), false);
+    await test("Owner updates their support chat preview",
+      () => updateDoc(doc(db(requester), "chats", `${requester}_prc_support`),
+        { lastMessage: "Hello PRC" }), true);
+    await test("Admin reads match chat messages",
+      () => getDocs(collection(db(admin), "chats", matchChat, "messages")), true);
 
     await seed();
     await test("The app cannot create a donor-match chat",

@@ -1,10 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/blood_request/presentation/screens/blood_request_detail_screen.dart';
-import '../../features/blood_request/presentation/screens/request_offers_screen.dart';
 import '../../features/chat/presentation/screens/prc_chat_room_screen.dart';
-import '../../features/chat/presentation/screens/match_chat_screen.dart';
+import '../../features/donor/presentation/screens/matched_donor_detail_screen.dart';
 import '../../features/donor/presentation/screens/my_offers_screen.dart';
 
 /// Root navigator, so notification taps can navigate from outside a widget.
@@ -72,26 +72,24 @@ class NotificationRouter {
     switch (route) {
       case NotificationRoute.request when requestId != null:
         await _openRequest(navigator, requestId);
+      // The requester's donor news: the read-only, anonymised Matched Donor
+      // view (donor code and blood type only).
       case NotificationRoute.requestOffers when requestId != null:
-        navigator.push(
-          MaterialPageRoute(
-            builder: (_) => RequestOffersScreen(
-              requestId: requestId,
-              title: 'Offers for your request',
-            ),
-          ),
-        );
+        _openMatchedDonor(navigator, requestId);
       case NotificationRoute.myOffers:
         navigator.push(
           MaterialPageRoute(builder: (_) => const MyOffersScreen()),
         );
       case NotificationRoute.chat when chatId != null:
+        if (isRetiredMatchChat(chatId)) {
+          await _openRetiredMatchChat(navigator, chatId);
+          return;
+        }
         final name = _string(data['chatName']) ?? 'Chat';
         navigator.push(
           MaterialPageRoute(
-            builder: (_) => isMatchChat(chatId)
-                ? MatchChatScreen(chatId: chatId, title: name)
-                : PrcChatRoomScreen(chatId: chatId, otherUserName: name),
+            builder: (_) =>
+                PrcChatRoomScreen(chatId: chatId, otherUserName: name),
           ),
         );
       case NotificationRoute.activity:
@@ -109,6 +107,54 @@ class NotificationRouter {
         builder: (_) => BloodRequestDetailScreen(requestId: requestId),
       ),
     );
+  }
+
+  void _openMatchedDonor(NavigatorState navigator, String requestId) {
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => MatchedDonorDetailScreen(requestId: requestId),
+      ),
+    );
+  }
+
+  /// Requester-donor chats (`match_{requestId}_{offerId}`) are retired:
+  /// donors stay anonymous and PRC coordinates. An old chat notification
+  /// opens Matched Donor for the requester, My Offers for the donor.
+  @visibleForTesting
+  static bool isRetiredMatchChat(String chatId) => chatId.startsWith('match_');
+
+  /// `match_{requestId}_{offerId}` → requestId (Firestore auto-ids have no
+  /// underscores).
+  @visibleForTesting
+  static String? requestIdOfMatchChat(String chatId) {
+    final parts = chatId.split('_');
+    return parts.length == 3 && parts[1].isNotEmpty ? parts[1] : null;
+  }
+
+  Future<void> _openRetiredMatchChat(
+    NavigatorState navigator,
+    String chatId,
+  ) async {
+    final requestId = requestIdOfMatchChat(chatId);
+    // Only the requester may read the request (firestore.rules).
+    var isRequester = false;
+    if (requestId != null) {
+      try {
+        isRequester =
+            (await FirebaseFirestore.instance
+                    .collection('blood_requests')
+                    .doc(requestId)
+                    .get())
+                .exists;
+      } catch (_) {
+        isRequester = false; // permission denied: the donor
+      }
+    }
+    if (isRequester) {
+      _openMatchedDonor(navigator, requestId!);
+    } else {
+      navigator.push(MaterialPageRoute(builder: (_) => const MyOffersScreen()));
+    }
   }
 
   /// `route` from the backend, or a fallback for records written before

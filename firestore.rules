@@ -398,7 +398,8 @@ service cloud.firestore {
           'fulfilledAt',
           'fulfilledBy',
           'reviewedBy',
-          'reviewedAt'
+          'reviewedAt',
+          'matchedDonorCodes'
         ]);
 
       // PRC administrators may manage request statuses.
@@ -455,6 +456,8 @@ service cloud.firestore {
             'matchedAt',
             'reopenedAt',
             'matchingDonorsNotified',
+            // Anonymised codes of PRC-confirmed donors (admin portal).
+            'matchedDonorCodes',
             // PRC stock reserved for the request (blood_connect_backend
             // prc_stock/) and PRC's review checklist (admin portal).
             'prcStock',
@@ -493,6 +496,8 @@ service cloud.firestore {
           && request.resource.data.get('donorId', '') == request.auth.uid
           && request.resource.data.get('status', 'pending') == 'pending'
           && request.resource.data.get('requestId', requestId) == requestId
+          // PRC assigns the anonymised DNR code when it confirms the offer.
+          && !request.resource.data.keys().hasAny(['donorCode'])
           && get(
             /databases/$(database)/documents/blood_requests/$(requestId)
           ).data.get('status', '') in ['active', 'approved']
@@ -530,7 +535,7 @@ service cloud.firestore {
           && !request.resource.data
             .diff(resource.data)
             .affectedKeys()
-            .hasAny(['status'])
+            .hasAny(['status', 'donorCode'])
         );
 
         allow delete: if isAdmin() || (
@@ -650,8 +655,20 @@ service cloud.firestore {
         return chatId == request.auth.uid + '_prc_support';
       }
 
-      allow read: if isAuthenticated()
-        && (isAdmin() || isParticipant(resource.data));
+      // Retired requester-donor chats (match_{requestId}_{offerId}). Donors
+      // stay anonymous to requesters, so only PRC may read them now.
+      function isDonorMatchChat(data) {
+        return data.get('type', '') == 'donor_match';
+      }
+
+      function chatData() {
+        return get(/databases/$(database)/documents/chats/$(chatId)).data;
+      }
+
+      allow read: if isAuthenticated() && (
+        isAdmin()
+        || (isParticipant(resource.data) && !isDonorMatchChat(resource.data))
+      );
 
       allow create: if isAuthenticated() && (
         isAdmin()
@@ -667,6 +684,7 @@ service cloud.firestore {
         isAdmin()
         || (
           isParticipant(resource.data)
+          && !isDonorMatchChat(resource.data)
           && !request.resource.data.diff(resource.data).affectedKeys()
                .hasAny(['participants', 'type', 'requestId', 'offerId'])
           && (
@@ -687,19 +705,20 @@ service cloud.firestore {
 
         allow read: if isAuthenticated() && (
           isAdmin()
-          || request.auth.uid in get(
-            /databases/$(database)/documents/chats/$(chatId)
-          ).data.get('participants', [])
+          || (
+            request.auth.uid in chatData().get('participants', [])
+            && !isDonorMatchChat(chatData())
+          )
         );
 
         // Messages are sent as yourself; the support chat's automatic
-        // greeting is the one exception.
+        // greeting is the one exception. Retired donor-match chats take no
+        // new messages.
         allow create: if isAuthenticated() && (
           isAdmin()
           || (
-            request.auth.uid in get(
-              /databases/$(database)/documents/chats/$(chatId)
-            ).data.get('participants', [])
+            request.auth.uid in chatData().get('participants', [])
+            && !isDonorMatchChat(chatData())
             && (
               request.resource.data.get('senderId', '') == request.auth.uid
               || (
@@ -782,6 +801,17 @@ service cloud.firestore {
     match /announcements/{announcementId} {
       allow read: if isAuthenticated();
       allow create, update, delete: if isAdmin();
+    }
+
+    // ============================================================
+    // 13. COUNTERS (PRC-only sequence numbers)
+    // ============================================================
+    // counters/donorCodes {last}: the last anonymised donor code
+    // (DNR-0001...) PRC assigned when confirming an offer. The backend
+    // (Admin SDK) uses the same counter.
+
+    match /counters/{counterId} {
+      allow read, write: if isAdmin();
     }
 
   }

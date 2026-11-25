@@ -64,4 +64,23 @@ void main() {
       );
     });
   });
+
+  group('retired requester-donor chats', () {
+    test('match chats are recognised; support chats are not', () {
+      expect(NotificationRouter.isRetiredMatchChat('match_req1_off1'), isTrue);
+      expect(
+        NotificationRouter.isRetiredMatchChat('uid123_prc_support'),
+        isFalse,
+      );
+    });
+
+    test('request id is read from the chat id', () {
+      expect(
+        NotificationRouter.requestIdOfMatchChat('match_req1_off1'),
+        'req1',
+      );
+      expect(NotificationRouter.requestIdOfMatchChat('match_bad'), isNull);
+      expect(NotificationRouter.requestIdOfMatchChat('match__off1'), isNull);
+    });
+  });
 }

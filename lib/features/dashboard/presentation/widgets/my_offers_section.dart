@@ -2,8 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/statuses.dart';
-import '../../../blood_request/presentation/screens/request_offers_screen.dart';
-import '../../../chat/presentation/screens/match_chat_screen.dart';
 import '../../../donor/data/repositories/donor_repository_impl.dart';
 import 'activity_helpers.dart';
 
@@ -69,20 +67,6 @@ class _MyOffersSectionState extends State<MyOffersSection> {
     if (mounted) {
       showActivityResult(context, error, 'Your offer was withdrawn.');
     }
-  }
-
-  void _openChat(QueryDocumentSnapshot<Map<String, dynamic>> offer) {
-    final requestId =
-        offer.data()['requestId'] as String? ??
-        offer.reference.parent.parent!.id;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MatchChatScreen(
-          chatId: matchChatId(requestId, offer.id),
-          title: 'Requester',
-        ),
-      ),
-    );
   }
 
   @override
@@ -153,20 +137,45 @@ class _MyOffersSectionState extends State<MyOffersSection> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // PRC confirmed this donor: the backend opened a chat with
-            // the requester.
-            if (OfferStatus.isConfirmed(status))
-              TextButton.icon(
-                onPressed: () => _openChat(offer),
-                icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                label: const Text('Chat'),
-              ),
             if (OfferStatus.isActive(status))
               TextButton(
                 onPressed: () => _withdraw(offer),
                 child: const Text('Withdraw'),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Colored label for an offer status in the donor's offer list.
+class OfferStatusChip extends StatelessWidget {
+  const OfferStatusChip({super.key, required this.status});
+
+  final String? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status?.trim().toLowerCase()) {
+      OfferStatus.approved || OfferStatus.legacyAccepted => Colors.green,
+      OfferStatus.donated => Colors.teal,
+      OfferStatus.rejected || OfferStatus.withdrawn => Colors.grey,
+      _ => Colors.orange,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        OfferStatus.label(status),
+        style: TextStyle(
+          color: color.shade800,
+          fontWeight: FontWeight.w600,
+          fontSize: 11,
         ),
       ),
     );
